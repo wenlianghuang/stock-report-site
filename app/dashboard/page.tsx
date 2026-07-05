@@ -1,0 +1,133 @@
+"use client";
+
+import Link from "next/link";
+import { FormEvent, useEffect, useState } from "react";
+import { ReportStatusBadge } from "@/components/ReportStatusBadge";
+import type { ReportRecord } from "@/lib/types";
+
+export default function DashboardPage() {
+  const [stockId, setStockId] = useState("");
+  const [reports, setReports] = useState<ReportRecord[]>([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function loadReports() {
+    const response = await fetch("/api/reports");
+    if (!response.ok) {
+      return;
+    }
+    const payload = (await response.json()) as { reports: ReportRecord[] };
+    setReports(payload.reports);
+  }
+
+  useEffect(() => {
+    void loadReports();
+  }, []);
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const response = await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stockId }),
+      });
+      const payload = (await response.json()) as {
+        error?: string;
+        report?: ReportRecord;
+      };
+
+      if (!response.ok || !payload.report) {
+        setError(payload.error ?? "無法建立報告");
+        return;
+      }
+
+      window.location.href = `/reports/${payload.report.id}`;
+    } catch {
+      setError("網路錯誤，請稍後再試");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
+  }
+
+  return (
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-10">
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">台股籌碼報告</h1>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            輸入股號後會執行 tw-stock-report → report-gate（agy loop engineering）
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void logout()}
+          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+        >
+          登出
+        </button>
+      </header>
+
+      <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <h2 className="text-lg font-medium">產生新報告</h2>
+        <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3 sm:flex-row">
+          <input
+            value={stockId}
+            onChange={(event) => setStockId(event.target.value)}
+            placeholder="例如 2409"
+            pattern="\d{4,6}"
+            required
+            className="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-black"
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            {loading ? "建立中…" : "開始分析"}
+          </button>
+        </form>
+        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+      </section>
+
+      <section>
+        <h2 className="text-lg font-medium">我的報告</h2>
+        {reports.length === 0 ? (
+          <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
+            尚無報告，請先輸入股號開始分析。
+          </p>
+        ) : (
+          <ul className="mt-4 divide-y divide-zinc-200 rounded-2xl border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-950">
+            {reports.map((report) => (
+              <li key={report.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                <div>
+                  <p className="font-medium">{report.stockId}</p>
+                  <p className="text-xs text-zinc-500">
+                    {new Date(report.createdAt).toLocaleString("zh-TW")}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <ReportStatusBadge status={report.status} />
+                  <Link
+                    href={`/reports/${report.id}`}
+                    className="text-sm font-medium text-zinc-900 underline dark:text-zinc-100"
+                  >
+                    查看
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}

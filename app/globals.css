@@ -22,5 +22,43 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+.report-markdown {
+  line-height: 1.7;
+}
+
+.report-markdown h1,
+.report-markdown h2,
+.report-markdown h3 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+}
+
+.report-markdown p,
+.report-markdown ul,
+.report-markdown ol {
+  margin: 0.75rem 0;
+}
+
+.report-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+}
+
+.report-markdown th,
+.report-markdown td {
+  border: 1px solid rgb(228 228 231);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.report-markdown hr {
+  margin: 1.5rem 0;
+  border: none;
+  border-top: 1px solid rgb(228 228 231);
 }
