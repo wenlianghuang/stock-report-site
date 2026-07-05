@@ -23,25 +23,39 @@ export async function GET(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "找不到報告" }, { status: 404 });
   }
 
+  if (report.status === "done" && report.markdown) {
+    return NextResponse.json({
+      report,
+      markdown: report.markdown,
+      agentJob: null,
+    });
+  }
+
   try {
     const agentJob = await getAgentJob(report.agentJobId);
-    if (
-      isValidReportStatus(agentJob.status) &&
-      (agentJob.status !== report.status ||
-        agentJob.trade_date !== report.tradeDate ||
-        agentJob.error !== report.error)
-    ) {
-      await updateReport(report.id, {
-        status: agentJob.status,
-        tradeDate: agentJob.trade_date ?? undefined,
-        error: agentJob.error ?? undefined,
-      });
+    const patch: Parameters<typeof updateReport>[1] = {};
+
+    if (isValidReportStatus(agentJob.status)) {
+      patch.status = agentJob.status;
+    }
+    if (agentJob.trade_date) {
+      patch.tradeDate = agentJob.trade_date;
+    }
+    if (agentJob.error) {
+      patch.error = agentJob.error;
+    }
+    if (agentJob.markdown) {
+      patch.markdown = agentJob.markdown;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      await updateReport(report.id, patch);
     }
 
     const refreshed = await findReportById(id);
     return NextResponse.json({
       report: refreshed,
-      markdown: agentJob.markdown ?? null,
+      markdown: agentJob.markdown ?? refreshed?.markdown ?? null,
       agentJob,
     });
   } catch (error) {

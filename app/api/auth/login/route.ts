@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { findUserByEmail } from "@/lib/db";
-import { createSession, requireUser, verifyPassword } from "@/lib/auth";
+import { mapAuthError, requireUser } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   const body = (await request.json()) as {
@@ -15,13 +15,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "請填寫 email 與密碼" }, { status: 400 });
   }
 
-  const user = await findUserByEmail(email);
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    return NextResponse.json({ error: "email 或密碼錯誤" }, { status: 401 });
-  }
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-  await createSession(user.id);
-  return NextResponse.json({ user: { id: user.id, email: user.email } });
+    if (error) {
+      return NextResponse.json(
+        { error: mapAuthError(error.message) },
+        { status: 401 },
+      );
+    }
+
+    if (!data.user) {
+      return NextResponse.json({ error: "登入失敗" }, { status: 401 });
+    }
+
+    return NextResponse.json({
+      user: { id: data.user.id, email: data.user.email ?? email },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "登入失敗";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function GET() {

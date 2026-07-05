@@ -1,109 +1,101 @@
-import { randomUUID } from "crypto";
-import { mkdir, readFile, writeFile } from "fs/promises";
-import path from "path";
-import type { DbShape, ReportRecord, ReportStatus, User } from "./types";
-
-const DATA_DIR = path.join(process.cwd(), ".data");
-const DB_PATH = path.join(DATA_DIR, "db.json");
-
-const EMPTY_DB: DbShape = { users: [], reports: [] };
-
-async function ensureDb(): Promise<DbShape> {
-  await mkdir(DATA_DIR, { recursive: true });
-  try {
-    const raw = await readFile(DB_PATH, "utf8");
-    return JSON.parse(raw) as DbShape;
-  } catch {
-    await writeFile(DB_PATH, JSON.stringify(EMPTY_DB, null, 2), "utf8");
-    return { ...EMPTY_DB };
-  }
-}
-
-async function saveDb(db: DbShape): Promise<void> {
-  await mkdir(DATA_DIR, { recursive: true });
-  await writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf8");
-}
-
-export async function findUserByEmail(email: string): Promise<User | undefined> {
-  const db = await ensureDb();
-  return db.users.find((user) => user.email === email.toLowerCase());
-}
-
-export async function findUserById(id: string): Promise<User | undefined> {
-  const db = await ensureDb();
-  return db.users.find((user) => user.id === id);
-}
-
-export async function createUser(email: string, passwordHash: string): Promise<User> {
-  const db = await ensureDb();
-  const normalized = email.trim().toLowerCase();
-  if (db.users.some((user) => user.email === normalized)) {
-    throw new Error("EMAIL_EXISTS");
-  }
-
-  const user: User = {
-    id: randomUUID(),
-    email: normalized,
-    passwordHash,
-    createdAt: new Date().toISOString(),
-  };
-  db.users.push(user);
-  await saveDb(db);
-  return user;
-}
+import { createClient } from "@/lib/supabase/server";
+import type { ReportRecord, ReportRow } from "./types";
+import { rowToReport } from "./types";
 
 export async function createReport(input: {
   userId: string;
   stockId: string;
   agentJobId: string;
 }): Promise<ReportRecord> {
-  const db = await ensureDb();
-  const now = new Date().toISOString();
-  const report: ReportRecord = {
-    id: randomUUID(),
-    userId: input.userId,
-    stockId: input.stockId,
-    agentJobId: input.agentJobId,
-    status: "queued",
-    createdAt: now,
-    updatedAt: now,
-  };
-  db.reports.push(report);
-  await saveDb(db);
-  return report;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("reports")
+    .insert({
+      user_id: input.userId,
+      stock_id: input.stockId,
+      agent_job_id: input.agentJobId,
+      status: "queued",
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "無法建立報告紀錄");
+  }
+
+  return rowToReport(data as ReportRow);
 }
 
 export async function updateReport(
   id: string,
-  patch: Partial<Pick<ReportRecord, "status" | "tradeDate" | "error">>,
+  patch: Partial<
+    Pick<ReportRecord, "status" | "tradeDate" | "error" | "markdown">
+  >,
 ): Promise<ReportRecord | undefined> {
-  const db = await ensureDb();
-  const report = db.reports.find((item) => item.id === id);
-  if (!report) {
+  const supabase = await createClient();
+  const payload: Record<string, string | null | undefined> = {};
+
+  if (patch.status !== undefined) {
+    payload.status = patch.status;
+  }
+  if (patch.tradeDate !== undefined) {
+    payload.trade_date = patch.tradeDate;
+  }
+  if (patch.error !== undefined) {
+    payload.error = patch.error;
+  }
+  if (patch.markdown !== undefined) {
+    payload.markdown = patch.markdown;
+  }
+
+  const { data, error } = await supabase
+    .from("reports")
+    .update(payload)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error || !data) {
     return undefined;
   }
 
-  Object.assign(report, patch, { updatedAt: new Date().toISOString() });
-  await saveDb(db);
-  return report;
+  return rowToReport(data as ReportRow);
 }
 
 export async function findReportById(id: string): Promise<ReportRecord | undefined> {
-  const db = await ensureDb();
-  return db.reports.find((item) => item.id === id);
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("reports")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error || !data) {
+    return undefined;
+  }
+
+  return rowToReport(data as ReportRow);
 }
 
 export async function listReportsForUser(userId: string): Promise<ReportRecord[]> {
-  const db = await ensureDb();
-  return db.reports
-    .filter((item) => item.userId === userId)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("reports")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error || !data) {
+    return [];
+  }
+
+  return (data as ReportRow[]).map(rowToReport);
 }
 
 export function isValidStockId(value: string): boolean {
   return /^\d{4,6}$/.test(value.trim());
 }
 
-export function isValidReportStatus(value: string): value is ReportStatus {
+export function isValidReportStatus(value: string): value is ReportRecord["status"] {
   return ["queued", "fetching", "gating", "done", "failed"].includes(value);
 }

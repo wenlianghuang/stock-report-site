@@ -5,20 +5,43 @@
 ## 架構
 
 ```
-使用者 (Next.js)  →  POST /api/reports  →  antigravity_agent API (8765)
-                                              ├ fetch_chip_report.py
-                                              └ report_gate.py (agy)
+使用者 (Next.js on Vercel)
+  ├─ Supabase Auth      → signup / login
+  ├─ Supabase Postgres  → reports 表
+  └─ Antigravity API    → 籌碼抓取 + agy 報告（需另部署或有 public URL）
 ```
 
-## 前置需求
+## 一次性設定：Supabase
 
-1. **Node.js 20+**（本專案）
-2. **antigravity_agent** 已安裝依賴，且 **agy CLI** 可用
-3. 兩個 process 同時運行（見下方）
+1. 至 [supabase.com](https://supabase.com) 建立專案
+2. **SQL Editor** 貼上並執行 [`supabase/schema.sql`](./supabase/schema.sql)
+3. **Authentication → Providers → Email**：開發期可關閉 **Confirm email**（否則註冊後需收信確認）
+4. **Project Settings → API** 複製：
+   - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
+   - anon public key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
-## 快速開始
+### Vercel 環境變數
 
-### 1. 啟動 Antigravity API（終端 A）
+在 Vercel → Settings → Environment Variables 設定：
+
+| 變數 | 說明 |
+|------|------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
+| `ANTIGRAVITY_API_URL` | antigravity API 公網 URL（本機開發用 `http://127.0.0.1:8765`） |
+
+設定後 **Redeploy**。
+
+## 本機開發
+
+### 1. 環境變數
+
+```bash
+cp .env.local.example .env.local
+# 填入 Supabase URL 與 anon key
+```
+
+### 2. Antigravity API（分析功能需要）
 
 ```bash
 cd ../antigravity_agent
@@ -26,38 +49,33 @@ uv sync --extra server --extra ui --extra stock
 uv run --extra server --extra ui --extra stock python main.py api
 ```
 
-預設監聽 `http://127.0.0.1:8765`。
-
-### 2. 啟動網站（終端 B）
+### 3. 啟動網站
 
 ```bash
-cp .env.local.example .env.local
-# 編輯 .env.local 設定 SESSION_SECRET
-
 npm install
 npm run dev
 ```
 
-開啟 [http://localhost:3000](http://localhost:3000) → 註冊 → 輸入股號（如 `2409`）→ 等待報告完成。
+開啟 [http://localhost:3000](http://localhost:3000) → 註冊 → 輸入股號。
 
-## 環境變數
+### 4. 測試 Auth API
 
-| 變數 | 說明 | 預設 |
-|------|------|------|
-| `SESSION_SECRET` | JWT session 簽章密鑰 | （必填於 production） |
-| `ANTIGRAVITY_API_URL` | antigravity API 位址 | `http://127.0.0.1:8765` |
+```bash
+npm run dev   # 另一個終端
+npm run test:auth
+```
 
-## 流程說明
+## 流程
 
-1. **Signup / Login** — 帳密存在 `.data/db.json`（本機 MVP）
+1. **Signup / Login** — Supabase Auth（帳號存在雲端，Vercel 可正常使用）
 2. **選股號** — Dashboard 輸入 4～6 位台股代號
-3. **背景 pipeline** — antigravity worker 依序執行：
-   - `fetch_chip_report.py --stocks {代碼}` → CSV
-   - `report_gate.py {代碼}` → agy 產報 + 驗證閉環
-4. **報告頁** — 每 3 秒輪詢狀態，完成後用 `react-markdown` 顯示
+3. **背景 pipeline** — antigravity worker：
+   - `fetch_chip_report.py --stocks {代碼}`
+   - `report_gate.py {代碼}`
+4. **報告頁** — 輪詢狀態，完成後渲染 Markdown（並寫入 Supabase `reports.markdown`）
 
 ## 注意
 
-- 籌碼資料約 **21:30 後**較完整；非交易時段可能使用最近交易日。
-- 單檔報告通常需 **2～5 分鐘**（含 agy 多輪修正）。
-- `content/reports/` 為歷史紀錄，與線上流程無關。
+- **本機 `.data/` 已不再使用**；請在 Vercel 上重新註冊帳號。
+- 籌碼資料約 **21:30 後**較完整。
+- Vercel 無法連 `127.0.0.1:8765`；線上分析需將 antigravity API 部署到有 public URL 的機器。

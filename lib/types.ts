@@ -1,10 +1,3 @@
-export type User = {
-  id: string;
-  email: string;
-  passwordHash: string;
-  createdAt: string;
-};
-
 export type ReportStatus =
   | "queued"
   | "fetching"
@@ -22,11 +15,20 @@ export type ReportRecord = {
   updatedAt: string;
   tradeDate?: string;
   error?: string;
+  markdown?: string;
 };
 
-export type DbShape = {
-  users: User[];
-  reports: ReportRecord[];
+export type ReportRow = {
+  id: string;
+  user_id: string;
+  stock_id: string;
+  agent_job_id: string;
+  status: ReportStatus;
+  trade_date: string | null;
+  error: string | null;
+  markdown: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type AgentJob = {
@@ -41,3 +43,18 @@ export type AgentJob = {
   md_path?: string | null;
   csv_path?: string | null;
 };
+
+export function rowToReport(row: ReportRow): ReportRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    stockId: row.stock_id,
+    agentJobId: row.agent_job_id,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    tradeDate: row.trade_date ?? undefined,
+    error: row.error ?? undefined,
+    markdown: row.markdown ?? undefined,
+  };
+}

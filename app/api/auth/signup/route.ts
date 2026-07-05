@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createUser } from "@/lib/db";
-import { createSession, hashPassword } from "@/lib/auth";
+import { mapAuthError } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   const body = (await request.json()) as {
@@ -19,14 +19,33 @@ export async function POST(request: Request) {
   }
 
   try {
-    const passwordHash = await hashPassword(password);
-    const user = await createUser(email, passwordHash);
-    await createSession(user.id);
-    return NextResponse.json({ user: { id: user.id, email: user.email } });
-  } catch (error) {
-    if (error instanceof Error && error.message === "EMAIL_EXISTS") {
-      return NextResponse.json({ error: "此 email 已註冊" }, { status: 409 });
+    const supabase = await createClient();
+    const { data, error } = await supabase.auth.signUp({ email, password });
+
+    if (error) {
+      return NextResponse.json(
+        { error: mapAuthError(error.message) },
+        { status: 400 },
+      );
     }
-    return NextResponse.json({ error: "註冊失敗" }, { status: 500 });
+
+    if (!data.user) {
+      return NextResponse.json({ error: "註冊失敗" }, { status: 500 });
+    }
+
+    if (!data.session) {
+      return NextResponse.json({
+        user: { id: data.user.id, email: data.user.email ?? email },
+        message: "註冊成功，請至 email 確認後再登入（若已關閉 email 確認則可直接登入）",
+        needsConfirmation: true,
+      });
+    }
+
+    return NextResponse.json({
+      user: { id: data.user.id, email: data.user.email ?? email },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "註冊失敗";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
