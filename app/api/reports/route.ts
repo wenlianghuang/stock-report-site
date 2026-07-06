@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { createReport, isValidStockId, listReportsForUser } from "@/lib/db";
+import {
+  createReport,
+  isValidStockId,
+  isValidTradeDate,
+  listReportsForUser,
+} from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { checkAgentHealth, createAgentJob } from "@/lib/agent-client";
 
@@ -19,12 +24,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "未登入" }, { status: 401 });
   }
 
-  const body = (await request.json()) as { stockId?: string };
+  const body = (await request.json()) as {
+    stockId?: string;
+    tradeDate?: string;
+  };
   const stockId = body.stockId?.trim() ?? "";
+  const tradeDate = body.tradeDate?.trim() ?? "";
 
   if (!isValidStockId(stockId)) {
     return NextResponse.json(
       { error: "請輸入 4～6 位數台股代號" },
+      { status: 400 },
+    );
+  }
+
+  if (tradeDate && !isValidTradeDate(tradeDate)) {
+    return NextResponse.json(
+      { error: "交易日期格式須為 YYYY-MM-DD" },
       { status: 400 },
     );
   }
@@ -41,11 +57,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    const agentJob = await createAgentJob(stockId);
+    const agentJob = await createAgentJob(stockId, tradeDate || undefined);
     const report = await createReport({
       userId: user.id,
       stockId,
       agentJobId: agentJob.id,
+      tradeDate: tradeDate || undefined,
     });
 
     return NextResponse.json({ report, agentJob });

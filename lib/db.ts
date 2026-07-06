@@ -6,6 +6,7 @@ export async function createReport(input: {
   userId: string;
   stockId: string;
   agentJobId: string;
+  tradeDate?: string;
 }): Promise<ReportRecord> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -15,6 +16,7 @@ export async function createReport(input: {
       stock_id: input.stockId,
       agent_job_id: input.agentJobId,
       status: "queued",
+      ...(input.tradeDate ? { trade_date: input.tradeDate } : {}),
     })
     .select("*")
     .single();
@@ -94,6 +96,10 @@ export async function listReportsForUser(userId: string): Promise<ReportRecord[]
 
 export function isValidStockId(value: string): boolean {
   return /^\d{4,6}$/.test(value.trim());
+}
+
+export function isValidTradeDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
 }
 
 export function isValidReportStatus(value: string): value is ReportRecord["status"] {

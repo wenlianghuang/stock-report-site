@@ -80,7 +80,9 @@ export default function ReportPage() {
             ← 返回
           </Link>
           <h1 className="mt-2 text-2xl font-semibold">
-            {report ? `台股 ${report.stockId}` : "載入中…"}
+            {report
+              ? `台股 ${report.stockId}${report.tradeDate ? ` · ${report.tradeDate}` : ""}`
+              : "載入中…"}
           </h1>
         </div>
         {status ? <ReportStatusBadge status={status} /> : null}

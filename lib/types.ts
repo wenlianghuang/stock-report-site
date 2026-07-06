@@ -37,6 +37,7 @@ export type AgentJob = {
   status: ReportStatus;
   created_at: string;
   updated_at: string;
+  requested_trade_date?: string | null;
   trade_date?: string | null;
   error?: string | null;
   markdown?: string | null;

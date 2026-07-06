@@ -18,11 +18,22 @@ type AgentJobResponse = {
   job: AgentJob;
 };
 
-export async function createAgentJob(stockId: string): Promise<AgentJob> {
+export async function createAgentJob(
+  stockId: string,
+  tradeDate?: string,
+): Promise<AgentJob> {
+  const body: { stock_id: string; skip_pdf: boolean; trade_date?: string } = {
+    stock_id: stockId,
+    skip_pdf: true,
+  };
+  if (tradeDate) {
+    body.trade_date = tradeDate;
+  }
+
   const response = await fetch(`${baseUrl()}/jobs`, {
     method: "POST",
     headers: agentHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ stock_id: stockId, skip_pdf: true }),
+    body: JSON.stringify(body),
     cache: "no-store",
   });
 

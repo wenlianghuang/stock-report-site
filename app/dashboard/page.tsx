@@ -7,6 +7,7 @@ import type { ReportRecord } from "@/lib/types";
 
 export default function DashboardPage() {
   const [stockId, setStockId] = useState("");
+  const [tradeDate, setTradeDate] = useState("");
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -33,7 +34,10 @@ export default function DashboardPage() {
       const response = await fetch("/api/reports", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stockId }),
+        body: JSON.stringify({
+          stockId,
+          ...(tradeDate ? { tradeDate } : {}),
+        }),
       });
       const payload = (await response.json()) as {
         error?: string;
@@ -78,22 +82,33 @@ export default function DashboardPage() {
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
         <h2 className="text-lg font-medium">產生新報告</h2>
-        <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3 sm:flex-row">
-          <input
-            value={stockId}
-            onChange={(event) => setStockId(event.target.value)}
-            placeholder="例如 2409"
-            pattern="\d{4,6}"
-            required
-            className="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-black"
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
-          >
-            {loading ? "建立中…" : "開始分析"}
-          </button>
+        <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <input
+              value={stockId}
+              onChange={(event) => setStockId(event.target.value)}
+              placeholder="例如 2409"
+              pattern="\d{4,6}"
+              required
+              className="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-black"
+            />
+            <input
+              type="date"
+              value={tradeDate}
+              onChange={(event) => setTradeDate(event.target.value)}
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-black"
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
+            >
+              {loading ? "建立中…" : "開始分析"}
+            </button>
+          </div>
+          <p className="text-xs text-zinc-500">
+            交易日期選填；留空則使用最近交易日。
+          </p>
         </form>
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
       </section>
@@ -109,7 +124,14 @@ export default function DashboardPage() {
             {reports.map((report) => (
               <li key={report.id} className="flex items-center justify-between gap-4 px-4 py-3">
                 <div>
-                  <p className="font-medium">{report.stockId}</p>
+                  <p className="font-medium">
+                    {report.stockId}
+                    {report.tradeDate ? (
+                      <span className="ml-2 text-sm font-normal text-zinc-500">
+                        {report.tradeDate}
+                      </span>
+                    ) : null}
+                  </p>
                   <p className="text-xs text-zinc-500">
                     {new Date(report.createdAt).toLocaleString("zh-TW")}
                   </p>
