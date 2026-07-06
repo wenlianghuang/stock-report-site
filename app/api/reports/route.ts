@@ -75,7 +75,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          "Antigravity API 未啟動。請先在 antigravity_agent 執行：uv run --extra server --extra ui --extra stock python main.py api",
+          "Stock API 未啟動。請先在 stock-winning-rate 執行：uv run --extra server --extra ui --extra stock python main.py api",
       },
       { status: 503 },
     );

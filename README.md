@@ -1,6 +1,6 @@
 # stock-report-site
 
-台股籌碼報告網站：使用者註冊／登入後輸入股號，由 [antigravity_agent](../antigravity_agent) 執行 `tw-stock-report` → `report-gate`（agy loop engineering），完成後在網頁渲染 Markdown 報告。
+台股籌碼報告網站：使用者註冊／登入後輸入股號，由 [stock-winning-rate](../stock-winning-rate) 執行 `tw-stock-report` → `report-gate`（agy loop engineering），完成後在網頁渲染 Markdown 報告。
 
 ## 架構
 
@@ -8,7 +8,7 @@
 使用者 (Next.js on Vercel)
   ├─ Supabase Auth      → signup / login
   ├─ Supabase Postgres  → reports 表
-  └─ Antigravity API    → 籌碼抓取 + agy 報告（需另部署或有 public URL）
+  └─ Stock API          → 籌碼抓取 + agy 報告（需另部署或有 public URL）
 ```
 
 ## 一次性設定：Supabase
@@ -28,7 +28,7 @@
 |------|------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
-| `ANTIGRAVITY_API_URL` | antigravity API 公網 URL（本機開發用 `http://127.0.0.1:8765`） |
+| `ANTIGRAVITY_API_URL` | Stock API 公網 URL（本機開發用 `http://127.0.0.1:8765`） |
 
 設定後 **Redeploy**。
 
@@ -41,10 +41,10 @@ cp .env.local.example .env.local
 # 填入 Supabase URL 與 anon key
 ```
 
-### 2. Antigravity API（分析功能需要）
+### 2. Stock API（分析功能需要）
 
 ```bash
-cd ../antigravity_agent
+cd ../stock-winning-rate
 uv sync --extra server --extra ui --extra stock
 uv run --extra server --extra ui --extra stock python main.py api
 ```
@@ -69,7 +69,7 @@ npm run test:auth
 
 1. **Signup / Login** — Supabase Auth（帳號存在雲端，Vercel 可正常使用）
 2. **選股號** — Dashboard 輸入 4～6 位台股代號
-3. **背景 pipeline** — antigravity worker：
+3. **背景 pipeline** — stock-winning-rate worker：
    - `fetch_chip_report.py --stocks {代碼}`
    - `report_gate.py {代碼}`
 4. **報告頁** — 輪詢狀態，完成後渲染 Markdown（並寫入 Supabase `reports.markdown`）
@@ -78,4 +78,4 @@ npm run test:auth
 
 - **本機 `.data/` 已不再使用**；請在 Vercel 上重新註冊帳號。
 - 籌碼資料約 **21:30 後**較完整。
-- Vercel 無法連 `127.0.0.1:8765`；線上分析需將 antigravity API 部署到有 public URL 的機器。
+- Vercel 無法連 `127.0.0.1:8765`；線上分析需將 Stock API 部署到有 public URL 的機器。
