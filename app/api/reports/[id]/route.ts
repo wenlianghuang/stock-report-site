@@ -24,7 +24,12 @@ export async function GET(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "找不到報告" }, { status: 404 });
   }
 
-  if (report.status === "done" && report.markdown) {
+  const canReturnCached =
+    report.status === "done" &&
+    report.markdown &&
+    report.stockName;
+
+  if (canReturnCached) {
     return NextResponse.json({
       report,
       markdown: report.markdown,
@@ -69,6 +74,15 @@ export async function GET(_request: Request, context: RouteContext) {
       agentJob,
     });
   } catch (error) {
+    if (report.status === "done" && report.markdown) {
+      return NextResponse.json({
+        report,
+        markdown: report.markdown,
+        positionMarkdown: report.positionMarkdown ?? null,
+        agentJob: null,
+      });
+    }
+
     const message =
       error instanceof Error ? error.message : "無法取得任務狀態";
     return NextResponse.json({ error: message }, { status: 502 });
