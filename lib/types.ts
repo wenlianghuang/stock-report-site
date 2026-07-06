@@ -10,6 +10,7 @@ export type ReportRecord = {
   id: string;
   userId: string;
   stockId: string;
+  stockName?: string;
   agentJobId: string;
   status: ReportStatus;
   createdAt: string;
@@ -27,6 +28,7 @@ export type ReportRow = {
   id: string;
   user_id: string;
   stock_id: string;
+  stock_name: string | null;
   agent_job_id: string;
   status: ReportStatus;
   trade_date: string | null;
@@ -43,6 +45,7 @@ export type ReportRow = {
 export type AgentJob = {
   id: string;
   stock_id: string;
+  stock_name?: string | null;
   status: ReportStatus;
   created_at: string;
   updated_at: string;
@@ -63,6 +66,7 @@ export function rowToReport(row: ReportRow): ReportRecord {
     id: row.id,
     userId: row.user_id,
     stockId: row.stock_id,
+    stockName: row.stock_name ?? undefined,
     agentJobId: row.agent_job_id,
     status: row.status,
     createdAt: row.created_at,

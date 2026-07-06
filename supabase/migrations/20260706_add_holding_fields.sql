@@ -3,6 +3,7 @@
 alter table public.reports drop constraint if exists reports_status_check;
 
 alter table public.reports
+  add column if not exists stock_name text,
   add column if not exists is_holding boolean not null default false,
   add column if not exists share_count integer,
   add column if not exists avg_cost numeric,

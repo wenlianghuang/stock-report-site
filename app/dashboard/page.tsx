@@ -199,7 +199,9 @@ export default function DashboardPage() {
               <li key={report.id} className="flex items-center justify-between gap-4 px-4 py-3">
                 <div>
                   <p className="font-medium">
-                    {report.stockId}
+                    {report.stockName
+                      ? `${report.stockId} — ${report.stockName}`
+                      : report.stockId}
                     {report.isHolding && report.shareCount ? (
                       <span className="ml-2 text-sm font-normal text-zinc-500">
                         持股 {report.shareCount.toLocaleString("zh-TW")} 股

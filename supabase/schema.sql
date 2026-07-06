@@ -4,6 +4,7 @@ create table if not exists public.reports (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
   stock_id text not null,
+  stock_name text,
   agent_job_id text not null,
   status text not null default 'queued'
     check (status in ('queued', 'fetching', 'gating', 'positioning', 'done', 'failed')),

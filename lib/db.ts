@@ -43,7 +43,12 @@ export async function updateReport(
   patch: Partial<
     Pick<
       ReportRecord,
-      "status" | "tradeDate" | "error" | "markdown" | "positionMarkdown"
+      | "status"
+      | "tradeDate"
+      | "error"
+      | "markdown"
+      | "positionMarkdown"
+      | "stockName"
     >
   >,
 ): Promise<ReportRecord | undefined> {
@@ -64,6 +69,9 @@ export async function updateReport(
   }
   if (patch.positionMarkdown !== undefined) {
     payload.position_markdown = patch.positionMarkdown;
+  }
+  if (patch.stockName !== undefined) {
+    payload.stock_name = patch.stockName;
   }
 
   const { data, error } = await supabase

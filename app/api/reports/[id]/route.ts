@@ -52,6 +52,9 @@ export async function GET(_request: Request, context: RouteContext) {
     if (agentJob.position_markdown) {
       patch.positionMarkdown = agentJob.position_markdown;
     }
+    if (agentJob.stock_name) {
+      patch.stockName = agentJob.stock_name;
+    }
 
     if (Object.keys(patch).length > 0) {
       await updateReport(report.id, patch);

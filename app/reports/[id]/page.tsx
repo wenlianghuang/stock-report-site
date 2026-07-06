@@ -124,7 +124,9 @@ export default function ReportPage() {
           </Link>
           <h1 className="mt-2 text-2xl font-semibold">
             {report
-              ? `台股 ${report.stockId}${report.tradeDate ? ` · ${report.tradeDate}` : ""}${
+              ? `台股 ${report.stockName ? `${report.stockId} — ${report.stockName}` : report.stockId}${
+                  report.tradeDate ? ` · ${report.tradeDate}` : ""
+                }${
                   report.isHolding && report.shareCount
                     ? ` · 持股 ${report.shareCount.toLocaleString("zh-TW")} 股`
                     : ""
