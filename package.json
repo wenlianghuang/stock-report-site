@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test:auth": "node scripts/test-auth.mjs",
-    "verify:supabase": "node scripts/verify-supabase.mjs"
+    "verify:supabase": "node scripts/verify-supabase.mjs",
+    "test:agent": "node scripts/test-agent-health.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

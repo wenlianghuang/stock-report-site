@@ -6,6 +6,14 @@ function baseUrl(): string {
   return process.env.ANTIGRAVITY_API_URL ?? DEFAULT_BASE_URL;
 }
 
+function agentHeaders(extra?: Record<string, string>): HeadersInit {
+  const headers: Record<string, string> = { ...extra };
+  if (baseUrl().includes("ngrok")) {
+    headers["ngrok-skip-browser-warning"] = "true";
+  }
+  return headers;
+}
+
 type AgentJobResponse = {
   job: AgentJob;
 };
@@ -13,7 +21,7 @@ type AgentJobResponse = {
 export async function createAgentJob(stockId: string): Promise<AgentJob> {
   const response = await fetch(`${baseUrl()}/jobs`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: agentHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ stock_id: stockId, skip_pdf: true }),
     cache: "no-store",
   });
@@ -29,6 +37,7 @@ export async function createAgentJob(stockId: string): Promise<AgentJob> {
 
 export async function getAgentJob(jobId: string): Promise<AgentJob> {
   const response = await fetch(`${baseUrl()}/jobs/${jobId}`, {
+    headers: agentHeaders(),
     cache: "no-store",
   });
 
@@ -43,8 +52,21 @@ export async function getAgentJob(jobId: string): Promise<AgentJob> {
 
 export async function checkAgentHealth(): Promise<boolean> {
   try {
-    const response = await fetch(`${baseUrl()}/health`, { cache: "no-store" });
-    return response.ok;
+    const response = await fetch(`${baseUrl()}/health`, {
+      headers: agentHeaders(),
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return false;
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      return false;
+    }
+
+    const data = (await response.json()) as { status?: string };
+    return data.status === "ok";
   } catch {
     return false;
   }
