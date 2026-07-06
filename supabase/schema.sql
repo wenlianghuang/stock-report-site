@@ -6,12 +6,20 @@ create table if not exists public.reports (
   stock_id text not null,
   agent_job_id text not null,
   status text not null default 'queued'
-    check (status in ('queued', 'fetching', 'gating', 'done', 'failed')),
+    check (status in ('queued', 'fetching', 'gating', 'positioning', 'done', 'failed')),
   trade_date text,
   error text,
   markdown text,
+  is_holding boolean not null default false,
+  share_count integer,
+  avg_cost numeric,
+  position_markdown text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint reports_holding_share_count_check
+    check (not is_holding or (share_count is not null and share_count > 0)),
+  constraint reports_holding_avg_cost_check
+    check (not is_holding or (avg_cost is not null and avg_cost > 0))
 );
 
 create index if not exists reports_user_id_created_at_idx

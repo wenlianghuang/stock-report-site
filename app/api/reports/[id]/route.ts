@@ -28,6 +28,7 @@ export async function GET(_request: Request, context: RouteContext) {
     return NextResponse.json({
       report,
       markdown: report.markdown,
+      positionMarkdown: report.positionMarkdown ?? null,
       agentJob: null,
     });
   }
@@ -48,6 +49,9 @@ export async function GET(_request: Request, context: RouteContext) {
     if (agentJob.markdown) {
       patch.markdown = agentJob.markdown;
     }
+    if (agentJob.position_markdown) {
+      patch.positionMarkdown = agentJob.position_markdown;
+    }
 
     if (Object.keys(patch).length > 0) {
       await updateReport(report.id, patch);
@@ -57,6 +61,8 @@ export async function GET(_request: Request, context: RouteContext) {
     return NextResponse.json({
       report: refreshed,
       markdown: agentJob.markdown ?? refreshed?.markdown ?? null,
+      positionMarkdown:
+        agentJob.position_markdown ?? refreshed?.positionMarkdown ?? null,
       agentJob,
     });
   } catch (error) {

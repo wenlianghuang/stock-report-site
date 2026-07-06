@@ -18,16 +18,43 @@ type AgentJobResponse = {
   job: AgentJob;
 };
 
+type CreateAgentJobInput = {
+  stockId: string;
+  tradeDate?: string;
+  isHolding?: boolean;
+  shareCount?: number;
+  avgCost?: number;
+};
+
 export async function createAgentJob(
-  stockId: string,
+  input: CreateAgentJobInput | string,
   tradeDate?: string,
 ): Promise<AgentJob> {
-  const body: { stock_id: string; skip_pdf: boolean; trade_date?: string } = {
-    stock_id: stockId,
+  const params: CreateAgentJobInput =
+    typeof input === "string" ? { stockId: input, tradeDate } : input;
+
+  const body: {
+    stock_id: string;
+    skip_pdf: boolean;
+    trade_date?: string;
+    is_holding?: boolean;
+    share_count?: number;
+    avg_cost?: number;
+  } = {
+    stock_id: params.stockId,
     skip_pdf: true,
   };
-  if (tradeDate) {
-    body.trade_date = tradeDate;
+  if (params.tradeDate) {
+    body.trade_date = params.tradeDate;
+  }
+  if (params.isHolding) {
+    body.is_holding = true;
+    if (params.shareCount !== undefined) {
+      body.share_count = params.shareCount;
+    }
+    if (params.avgCost !== undefined) {
+      body.avg_cost = params.avgCost;
+    }
   }
 
   const response = await fetch(`${baseUrl()}/jobs`, {

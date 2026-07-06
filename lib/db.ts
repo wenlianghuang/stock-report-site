@@ -7,6 +7,9 @@ export async function createReport(input: {
   stockId: string;
   agentJobId: string;
   tradeDate?: string;
+  isHolding?: boolean;
+  shareCount?: number;
+  avgCost?: number;
 }): Promise<ReportRecord> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -16,7 +19,14 @@ export async function createReport(input: {
       stock_id: input.stockId,
       agent_job_id: input.agentJobId,
       status: "queued",
+      is_holding: input.isHolding ?? false,
       ...(input.tradeDate ? { trade_date: input.tradeDate } : {}),
+      ...(input.isHolding && input.shareCount !== undefined
+        ? { share_count: input.shareCount }
+        : {}),
+      ...(input.isHolding && input.avgCost !== undefined
+        ? { avg_cost: input.avgCost }
+        : {}),
     })
     .select("*")
     .single();
@@ -31,7 +41,10 @@ export async function createReport(input: {
 export async function updateReport(
   id: string,
   patch: Partial<
-    Pick<ReportRecord, "status" | "tradeDate" | "error" | "markdown">
+    Pick<
+      ReportRecord,
+      "status" | "tradeDate" | "error" | "markdown" | "positionMarkdown"
+    >
   >,
 ): Promise<ReportRecord | undefined> {
   const supabase = await createClient();
@@ -48,6 +61,9 @@ export async function updateReport(
   }
   if (patch.markdown !== undefined) {
     payload.markdown = patch.markdown;
+  }
+  if (patch.positionMarkdown !== undefined) {
+    payload.position_markdown = patch.positionMarkdown;
   }
 
   const { data, error } = await supabase
@@ -117,5 +133,15 @@ export function isValidTradeDate(value: string): boolean {
 }
 
 export function isValidReportStatus(value: string): value is ReportRecord["status"] {
-  return ["queued", "fetching", "gating", "done", "failed"].includes(value);
+  return ["queued", "fetching", "gating", "positioning", "done", "failed"].includes(
+    value,
+  );
+}
+
+export function isValidShareCount(value: number): boolean {
+  return Number.isInteger(value) && value > 0;
+}
+
+export function isValidAvgCost(value: number): boolean {
+  return Number.isFinite(value) && value > 0;
 }

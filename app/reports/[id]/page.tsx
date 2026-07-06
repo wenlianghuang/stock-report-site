@@ -13,6 +13,7 @@ import type { ReportRecord, ReportStatus } from "@/lib/types";
 type ReportPayload = {
   report: ReportRecord;
   markdown: string | null;
+  positionMarkdown?: string | null;
   error?: string;
 };
 
@@ -22,6 +23,7 @@ export default function ReportPage() {
   const [payload, setPayload] = useState<ReportPayload | null>(null);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [activeTab, setActiveTab] = useState<"market" | "position">("market");
 
   useEffect(() => {
     if (!reportId) {
@@ -69,6 +71,12 @@ export default function ReportPage() {
 
   const report = payload?.report;
   const status = report?.status;
+  const hasPositionReport = Boolean(
+    report?.isHolding && (payload?.positionMarkdown || report?.positionMarkdown),
+  );
+  const marketMarkdown = payload?.markdown ?? report?.markdown ?? null;
+  const positionMarkdown =
+    payload?.positionMarkdown ?? report?.positionMarkdown ?? null;
 
   async function onDelete() {
     if (!report) {
@@ -116,7 +124,11 @@ export default function ReportPage() {
           </Link>
           <h1 className="mt-2 text-2xl font-semibold">
             {report
-              ? `台股 ${report.stockId}${report.tradeDate ? ` · ${report.tradeDate}` : ""}`
+              ? `台股 ${report.stockId}${report.tradeDate ? ` · ${report.tradeDate}` : ""}${
+                  report.isHolding && report.shareCount
+                    ? ` · 持股 ${report.shareCount.toLocaleString("zh-TW")} 股`
+                    : ""
+                }`
               : "載入中…"}
           </h1>
         </div>
@@ -149,9 +161,41 @@ export default function ReportPage() {
         </pre>
       ) : null}
 
-      {payload?.markdown ? (
+      {payload?.markdown || positionMarkdown ? (
         <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-          <MarkdownReport markdown={payload.markdown} />
+          {hasPositionReport ? (
+            <div className="mb-4 flex gap-2 border-b border-zinc-200 pb-3 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setActiveTab("market")}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+                  activeTab === "market"
+                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900"
+                }`}
+              >
+                市場報告
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("position")}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+                  activeTab === "position"
+                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900"
+                }`}
+              >
+                部位報告
+              </button>
+            </div>
+          ) : null}
+          {activeTab === "position" && positionMarkdown ? (
+            <MarkdownReport markdown={positionMarkdown} />
+          ) : marketMarkdown ? (
+            <MarkdownReport markdown={marketMarkdown} />
+          ) : positionMarkdown ? (
+            <MarkdownReport markdown={positionMarkdown} />
+          ) : null}
         </div>
       ) : null}
 
