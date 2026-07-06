@@ -79,3 +79,4 @@ npm run test:auth
 - **本機 `.data/` 已不再使用**；請在 Vercel 上重新註冊帳號。
 - 籌碼資料約 **21:30 後**較完整。
 - Vercel 無法連 `127.0.0.1:8765`；線上分析需將 Stock API 部署到有 public URL 的機器。
+- 
