@@ -11,6 +11,7 @@ export default function DashboardPage() {
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function loadReports() {
     const response = await fetch("/api/reports");
@@ -54,6 +55,36 @@ export default function DashboardPage() {
       setError("網路錯誤，請稍後再試");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onDelete(report: ReportRecord) {
+    const label = report.tradeDate
+      ? `${report.stockId}（${report.tradeDate}）`
+      : report.stockId;
+    if (!window.confirm(`確定要刪除 ${label} 的報告嗎？`)) {
+      return;
+    }
+
+    setError("");
+    setDeletingId(report.id);
+
+    try {
+      const response = await fetch(`/api/reports/${report.id}`, {
+        method: "DELETE",
+      });
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        setError(payload.error ?? "無法刪除報告");
+        return;
+      }
+
+      setReports((prev) => prev.filter((item) => item.id !== report.id));
+    } catch {
+      setError("網路錯誤，請稍後再試");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -144,6 +175,14 @@ export default function DashboardPage() {
                   >
                     查看
                   </Link>
+                  <button
+                    type="button"
+                    onClick={() => void onDelete(report)}
+                    disabled={deletingId === report.id}
+                    className="text-sm text-red-600 hover:text-red-700 disabled:opacity-60 dark:text-red-400 dark:hover:text-red-300"
+                  >
+                    {deletingId === report.id ? "刪除中…" : "刪除"}
+                  </button>
                 </div>
               </li>
             ))}

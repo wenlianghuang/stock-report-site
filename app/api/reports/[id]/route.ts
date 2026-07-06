@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  deleteReport,
   findReportById,
   isValidReportStatus,
   updateReport,
@@ -63,4 +64,24 @@ export async function GET(_request: Request, context: RouteContext) {
       error instanceof Error ? error.message : "無法取得任務狀態";
     return NextResponse.json({ error: message }, { status: 502 });
   }
+}
+
+export async function DELETE(_request: Request, context: RouteContext) {
+  const user = await requireUser();
+  if (!user) {
+    return NextResponse.json({ error: "未登入" }, { status: 401 });
+  }
+
+  const { id } = await context.params;
+  const report = await findReportById(id);
+  if (!report || report.userId !== user.id) {
+    return NextResponse.json({ error: "找不到報告" }, { status: 404 });
+  }
+
+  const deleted = await deleteReport(id, user.id);
+  if (!deleted) {
+    return NextResponse.json({ error: "無法刪除報告" }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
 }

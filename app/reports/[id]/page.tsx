@@ -21,6 +21,7 @@ export default function ReportPage() {
   const reportId = params.id;
   const [payload, setPayload] = useState<ReportPayload | null>(null);
   const [error, setError] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!reportId) {
@@ -69,6 +70,40 @@ export default function ReportPage() {
   const report = payload?.report;
   const status = report?.status;
 
+  async function onDelete() {
+    if (!report) {
+      return;
+    }
+
+    const label = report.tradeDate
+      ? `${report.stockId}（${report.tradeDate}）`
+      : report.stockId;
+    if (!window.confirm(`確定要刪除 ${label} 的報告嗎？`)) {
+      return;
+    }
+
+    setDeleting(true);
+    setError("");
+
+    try {
+      const response = await fetch(`/api/reports/${report.id}`, {
+        method: "DELETE",
+      });
+      const data = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        setError(data.error ?? "無法刪除報告");
+        setDeleting(false);
+        return;
+      }
+
+      window.location.href = "/dashboard";
+    } catch {
+      setError("網路錯誤，請稍後再試");
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-10">
       <div className="flex items-center justify-between gap-4">
@@ -85,7 +120,19 @@ export default function ReportPage() {
               : "載入中…"}
           </h1>
         </div>
-        {status ? <ReportStatusBadge status={status} /> : null}
+        <div className="flex items-center gap-3">
+          {status ? <ReportStatusBadge status={status} /> : null}
+          {report ? (
+            <button
+              type="button"
+              onClick={() => void onDelete()}
+              disabled={deleting}
+              className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
+            >
+              {deleting ? "刪除中…" : "刪除"}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {status ? (

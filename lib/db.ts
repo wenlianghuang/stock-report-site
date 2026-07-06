@@ -79,6 +79,20 @@ export async function findReportById(id: string): Promise<ReportRecord | undefin
   return rowToReport(data as ReportRow);
 }
 
+export async function deleteReport(
+  id: string,
+  userId: string,
+): Promise<boolean> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("reports")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId);
+
+  return !error;
+}
+
 export async function listReportsForUser(userId: string): Promise<ReportRecord[]> {
   const supabase = await createClient();
   const { data, error } = await supabase

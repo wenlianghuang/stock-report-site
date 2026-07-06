@@ -34,6 +34,11 @@ create policy "Users update own reports"
   on public.reports for update
   using (auth.uid() = user_id);
 
+drop policy if exists "Users delete own reports" on public.reports;
+create policy "Users delete own reports"
+  on public.reports for delete
+  using (auth.uid() = user_id);
+
 create or replace function public.set_reports_updated_at()
 returns trigger
 language plpgsql
