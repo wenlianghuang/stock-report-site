@@ -5,9 +5,37 @@ import { FormEvent, useEffect, useState } from "react";
 import { ReportStatusBadge } from "@/components/ReportStatusBadge";
 import type { ReportRecord } from "@/lib/types";
 
+const CHIP_READY_MINUTES = 21 * 60 + 30;
+
+function computeDefaultTradeDate(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+
+  const get = (type: string) =>
+    Number(parts.find((part) => part.type === type)?.value ?? "0");
+
+  const base = new Date(
+    Date.UTC(get("year"), get("month") - 1, get("day")),
+  );
+  if (get("hour") * 60 + get("minute") < CHIP_READY_MINUTES) {
+    base.setUTCDate(base.getUTCDate() - 1);
+  }
+  while (base.getUTCDay() === 0 || base.getUTCDay() === 6) {
+    base.setUTCDate(base.getUTCDate() - 1);
+  }
+  return base.toISOString().slice(0, 10);
+}
+
 export default function DashboardPage() {
   const [stockId, setStockId] = useState("");
-  const [tradeDate, setTradeDate] = useState("");
+  const [tradeDate, setTradeDate] = useState(computeDefaultTradeDate);
   const [isHolding, setIsHolding] = useState(false);
   const [shareCount, setShareCount] = useState("");
   const [avgCost, setAvgCost] = useState("");
@@ -181,7 +209,7 @@ export default function DashboardPage() {
             </button>
           </div>
           <p className="text-xs text-zinc-500">
-            交易日期選填；留空則使用最近交易日。有持股時會額外產出部位決策報告。
+            交易日期已自動帶入（21:30 前用前一交易日、之後用當日，遇週末順延至上一交易日），可自行調整；清空則由系統使用最近交易日。有持股時會額外產出部位決策報告。
           </p>
         </form>
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
