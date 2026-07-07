@@ -27,7 +27,8 @@ export async function GET(_request: Request, context: RouteContext) {
   const canReturnCached =
     report.status === "done" &&
     report.markdown &&
-    report.stockName;
+    report.stockName &&
+    (!report.isHolding || report.positionMarkdown);
 
   if (canReturnCached) {
     return NextResponse.json({

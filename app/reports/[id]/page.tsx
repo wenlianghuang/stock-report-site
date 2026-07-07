@@ -24,6 +24,7 @@ export default function ReportPage() {
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<"market" | "position">("market");
+  const [tabPinned, setTabPinned] = useState(false);
 
   useEffect(() => {
     if (!reportId) {
@@ -69,11 +70,16 @@ export default function ReportPage() {
     };
   }, [reportId]);
 
+  useEffect(() => {
+    if (tabPinned || !payload?.report.isHolding) {
+      return;
+    }
+    setActiveTab("position");
+  }, [payload?.report.isHolding, tabPinned]);
+
   const report = payload?.report;
   const status = report?.status;
-  const hasPositionReport = Boolean(
-    report?.isHolding && (payload?.positionMarkdown || report?.positionMarkdown),
-  );
+  const hasPositionReport = Boolean(report?.isHolding);
   const marketMarkdown = payload?.markdown ?? report?.markdown ?? null;
   const positionMarkdown =
     payload?.positionMarkdown ?? report?.positionMarkdown ?? null;
@@ -163,24 +169,16 @@ export default function ReportPage() {
         </pre>
       ) : null}
 
-      {payload?.markdown || positionMarkdown ? (
+      {payload?.markdown || positionMarkdown || report?.isHolding ? (
         <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
           {hasPositionReport ? (
             <div className="mb-4 flex gap-2 border-b border-zinc-200 pb-3 dark:border-zinc-800">
               <button
                 type="button"
-                onClick={() => setActiveTab("market")}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                  activeTab === "market"
-                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900"
-                }`}
-              >
-                市場報告
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("position")}
+                onClick={() => {
+                  setTabPinned(true);
+                  setActiveTab("position");
+                }}
                 className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
                   activeTab === "position"
                     ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
@@ -189,14 +187,38 @@ export default function ReportPage() {
               >
                 部位報告
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTabPinned(true);
+                  setActiveTab("market");
+                }}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+                  activeTab === "market"
+                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900"
+                }`}
+              >
+                市場報告
+              </button>
             </div>
           ) : null}
-          {activeTab === "position" && positionMarkdown ? (
+          {report?.isHolding && activeTab === "position" && !positionMarkdown ? (
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              {status === "positioning"
+                ? "部位決策報告產生中…"
+                : status === "gating"
+                  ? "市場報告完成後將接續產出部位決策報告…"
+                  : "部位決策報告尚未就緒。"}
+            </p>
+          ) : activeTab === "position" && positionMarkdown ? (
+            <MarkdownReport markdown={positionMarkdown} />
+          ) : !report?.isHolding && marketMarkdown ? (
+            <MarkdownReport markdown={marketMarkdown} />
+          ) : report?.isHolding && positionMarkdown ? (
             <MarkdownReport markdown={positionMarkdown} />
           ) : marketMarkdown ? (
             <MarkdownReport markdown={marketMarkdown} />
-          ) : positionMarkdown ? (
-            <MarkdownReport markdown={positionMarkdown} />
           ) : null}
         </div>
       ) : null}
