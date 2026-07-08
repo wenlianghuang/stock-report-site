@@ -35,9 +35,9 @@ export function statusHint(status: ReportStatus): string {
     case "fetching":
       return "正在從 FinMind / Yahoo 拉取籌碼 CSV…";
     case "gating":
-      return "agy 產出市場觀察報告，report-gate 驗證閉環（最多 3 輪）…";
+      return "agy 產出市場觀察報告，report-gate 驗證閉環（最多 5 輪）…";
     case "positioning":
-      return "agy 產出持股部位決策報告，position-gate 驗證閉環（最多 3 輪）…";
+      return "agy 產出持股部位決策報告，position-gate 驗證閉環（最多 5 輪）…";
     case "done":
       return "報告已完成。";
     case "failed":
