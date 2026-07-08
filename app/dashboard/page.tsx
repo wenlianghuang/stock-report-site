@@ -7,6 +7,18 @@ import type { ReportRecord } from "@/lib/types";
 
 const CHIP_READY_MINUTES = 21 * 60 + 30;
 
+type ReportGroup = {
+  year: string;
+  months: Array<{
+    month: string;
+    days: Array<{
+      day: string;
+      date: string;
+      reports: ReportRecord[];
+    }>;
+  }>;
+};
+
 function computeDefaultTradeDate(): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -33,6 +45,64 @@ function computeDefaultTradeDate(): string {
   return base.toISOString().slice(0, 10);
 }
 
+function reportDateKey(report: ReportRecord): string {
+  if (report.tradeDate) {
+    return report.tradeDate;
+  }
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(report.createdAt));
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function groupReportsByDate(reports: ReportRecord[]): ReportGroup[] {
+  const byDate = new Map<string, ReportRecord[]>();
+  for (const report of reports) {
+    const key = reportDateKey(report);
+    const list = byDate.get(key);
+    if (list) {
+      list.push(report);
+    } else {
+      byDate.set(key, [report]);
+    }
+  }
+
+  const dates = Array.from(byDate.keys()).sort((a, b) => b.localeCompare(a)); // newest first
+  const byYear = new Map<string, Map<string, Map<string, ReportRecord[]>>>();
+
+  for (const date of dates) {
+    const [year, month, day] = date.split("-");
+    if (!year || !month || !day) continue;
+    if (!byYear.has(year)) byYear.set(year, new Map());
+    const months = byYear.get(year)!;
+    if (!months.has(month)) months.set(month, new Map());
+    const days = months.get(month)!;
+    days.set(day, byDate.get(date)!);
+  }
+
+  return Array.from(byYear.entries())
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([year, months]) => ({
+      year,
+      months: Array.from(months.entries())
+        .sort(([a], [b]) => b.localeCompare(a))
+        .map(([month, days]) => ({
+          month,
+          days: Array.from(days.entries())
+            .sort(([a], [b]) => b.localeCompare(a))
+            .map(([day, reports]) => ({
+              day,
+              date: `${year}-${month}-${day}`,
+              reports,
+            })),
+        })),
+    }));
+}
+
 export default function DashboardPage() {
   const [stockId, setStockId] = useState("");
   const [tradeDate, setTradeDate] = useState(computeDefaultTradeDate);
@@ -43,6 +113,9 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [openYears, setOpenYears] = useState<Record<string, boolean>>({});
+  const [openMonths, setOpenMonths] = useState<Record<string, boolean>>({});
+  const [openDays, setOpenDays] = useState<Record<string, boolean>>({});
 
   async function loadReports() {
     const response = await fetch("/api/reports");
@@ -56,6 +129,24 @@ export default function DashboardPage() {
   useEffect(() => {
     void loadReports();
   }, []);
+
+  useEffect(() => {
+    if (reports.length === 0) return;
+    const today = computeDefaultTradeDate();
+    const grouped = groupReportsByDate(reports);
+    const hasToday = grouped.some((year) =>
+      year.months.some((month) => month.days.some((day) => day.date === today)),
+    );
+    const seedDate = hasToday ? today : reportDateKey(reports[0]);
+    const [yy, mm, dd] = seedDate.split("-");
+    if (!yy || !mm || !dd) return;
+    setOpenYears((prev) => (prev[yy] ? prev : { ...prev, [yy]: true }));
+    setOpenMonths((prev) => {
+      const key = `${yy}-${mm}`;
+      return prev[key] ? prev : { ...prev, [key]: true };
+    });
+    setOpenDays((prev) => (prev[seedDate] ? prev : { ...prev, [seedDate]: true }));
+  }, [reports]);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -130,6 +221,8 @@ export default function DashboardPage() {
     await fetch("/api/auth/logout", { method: "POST" });
     window.location.href = "/login";
   }
+
+  const groupedReports = groupReportsByDate(reports);
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-10">
@@ -222,49 +315,169 @@ export default function DashboardPage() {
             尚無報告，請先輸入股號開始分析。
           </p>
         ) : (
-          <ul className="mt-4 divide-y divide-zinc-200 rounded-2xl border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-950">
-            {reports.map((report) => (
-              <li key={report.id} className="flex items-center justify-between gap-4 px-4 py-3">
-                <div>
-                  <p className="font-medium">
-                    {report.stockName
-                      ? `${report.stockId} — ${report.stockName}`
-                      : report.stockId}
-                    {report.isHolding && report.shareCount ? (
-                      <span className="ml-2 text-sm font-normal text-zinc-500">
-                        持股 {report.shareCount.toLocaleString("zh-TW")} 股
-                      </span>
+          <div className="mt-4 rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+            <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
+              {groupedReports.map((yearGroup) => {
+                const yearCount = yearGroup.months.reduce(
+                  (sum, month) => sum + month.days.reduce((acc, day) => acc + day.reports.length, 0),
+                  0,
+                );
+                const isYearOpen = openYears[yearGroup.year] ?? false;
+                return (
+                  <li key={yearGroup.year} className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpenYears((prev) => ({
+                          ...prev,
+                          [yearGroup.year]: !(prev[yearGroup.year] ?? false),
+                        }))
+                      }
+                      className="flex w-full items-center justify-between gap-3 text-left"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-zinc-500">
+                          {isYearOpen ? "▾" : "▸"}
+                        </span>
+                        <span className="font-medium">{yearGroup.year}</span>
+                      </div>
+                      <span className="text-xs text-zinc-500">{yearCount} 份</span>
+                    </button>
+
+                    {isYearOpen ? (
+                      <ul className="mt-2 space-y-2 pl-6">
+                        {yearGroup.months.map((monthGroup) => {
+                          const monthKey = `${yearGroup.year}-${monthGroup.month}`;
+                          const monthCount = monthGroup.days.reduce(
+                            (sum, day) => sum + day.reports.length,
+                            0,
+                          );
+                          const isMonthOpen = openMonths[monthKey] ?? false;
+                          return (
+                            <li key={monthKey}>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setOpenMonths((prev) => ({
+                                    ...prev,
+                                    [monthKey]: !(prev[monthKey] ?? false),
+                                  }))
+                                }
+                                className="flex w-full items-center justify-between gap-3 text-left"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-zinc-500">
+                                    {isMonthOpen ? "▾" : "▸"}
+                                  </span>
+                                  <span className="text-sm font-medium">
+                                    {monthGroup.month} 月
+                                  </span>
+                                </div>
+                                <span className="text-xs text-zinc-500">{monthCount} 份</span>
+                              </button>
+
+                              {isMonthOpen ? (
+                                <ul className="mt-2 space-y-2 pl-6">
+                                  {monthGroup.days.map((dayGroup) => {
+                                    const dayKey = dayGroup.date;
+                                    const isDayOpen = openDays[dayKey] ?? false;
+                                    return (
+                                      <li key={dayKey}>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setOpenDays((prev) => ({
+                                              ...prev,
+                                              [dayKey]: !(prev[dayKey] ?? false),
+                                            }))
+                                          }
+                                          className="flex w-full items-center justify-between gap-3 text-left"
+                                        >
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-sm text-zinc-500">
+                                              {isDayOpen ? "▾" : "▸"}
+                                            </span>
+                                            <span className="text-sm font-medium">
+                                              {dayGroup.day} 日
+                                            </span>
+                                            <span className="text-xs text-zinc-500">
+                                              {dayGroup.date}
+                                            </span>
+                                          </div>
+                                          <span className="text-xs text-zinc-500">
+                                            {dayGroup.reports.length} 份
+                                          </span>
+                                        </button>
+
+                                        {isDayOpen ? (
+                                          <ul className="mt-2 divide-y divide-zinc-200 rounded-xl border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-950">
+                                            {dayGroup.reports.map((report) => (
+                                              <li
+                                                key={report.id}
+                                                className="flex items-center justify-between gap-4 px-4 py-3"
+                                              >
+                                                <div>
+                                                  <p className="font-medium">
+                                                    {report.stockName
+                                                      ? `${report.stockId} — ${report.stockName}`
+                                                      : report.stockId}
+                                                    {report.isHolding && report.shareCount ? (
+                                                      <span className="ml-2 text-sm font-normal text-zinc-500">
+                                                        持股{" "}
+                                                        {report.shareCount.toLocaleString("zh-TW")}{" "}
+                                                        股
+                                                      </span>
+                                                    ) : null}
+                                                    {report.tradeDate ? (
+                                                      <span className="ml-2 text-sm font-normal text-zinc-500">
+                                                        {report.tradeDate}
+                                                      </span>
+                                                    ) : null}
+                                                  </p>
+                                                  <p className="text-xs text-zinc-500">
+                                                    {new Date(report.createdAt).toLocaleString(
+                                                      "zh-TW",
+                                                    )}
+                                                  </p>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                  <ReportStatusBadge status={report.status} />
+                                                  <Link
+                                                    href={`/reports/${report.id}`}
+                                                    className="text-sm font-medium text-zinc-900 underline dark:text-zinc-100"
+                                                  >
+                                                    查看
+                                                  </Link>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => void onDelete(report)}
+                                                    disabled={deletingId === report.id}
+                                                    className="text-sm text-red-600 hover:text-red-700 disabled:opacity-60 dark:text-red-400 dark:hover:text-red-300"
+                                                  >
+                                                    {deletingId === report.id
+                                                      ? "刪除中…"
+                                                      : "刪除"}
+                                                  </button>
+                                                </div>
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        ) : null}
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
                     ) : null}
-                    {report.tradeDate ? (
-                      <span className="ml-2 text-sm font-normal text-zinc-500">
-                        {report.tradeDate}
-                      </span>
-                    ) : null}
-                  </p>
-                  <p className="text-xs text-zinc-500">
-                    {new Date(report.createdAt).toLocaleString("zh-TW")}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <ReportStatusBadge status={report.status} />
-                  <Link
-                    href={`/reports/${report.id}`}
-                    className="text-sm font-medium text-zinc-900 underline dark:text-zinc-100"
-                  >
-                    查看
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => void onDelete(report)}
-                    disabled={deletingId === report.id}
-                    className="text-sm text-red-600 hover:text-red-700 disabled:opacity-60 dark:text-red-400 dark:hover:text-red-300"
-                  >
-                    {deletingId === report.id ? "刪除中…" : "刪除"}
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         )}
       </section>
     </div>
