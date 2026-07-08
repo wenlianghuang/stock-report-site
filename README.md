@@ -29,6 +29,9 @@
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
 | `ANTIGRAVITY_API_URL` | Stock API 公網 URL（本機開發用 `http://127.0.0.1:8765`） |
+| `SMTP_USER` | Gmail 帳號（寄件者） |
+| `SMTP_PASS` | Gmail App Password（需先開 2FA） |
+| `EMAIL_FROM` | （可選）寄件者顯示名稱，例如 `Stock Report <wenliangmatt@gmail.com>` |
 
 設定後 **Redeploy**。
 
@@ -73,6 +76,10 @@ npm run test:auth
    - `fetch_chip_report.py --stocks {代碼}`
    - `report_gate.py {代碼}`
 4. **報告頁** — 輪詢狀態，完成後渲染 Markdown（並寫入 Supabase `reports.markdown`）
+5. **彙整 Email** — Dashboard 可針對某交易日按「寄出彙整 Email」，後端會：
+   - 讀取該日所有 `done` 報告（同一使用者）
+   - 呼叫 Stock API `/digest` 使用 agy 融合精簡（subject + 摘要 Markdown）
+   - 將摘要 Markdown 轉成 HTML 後寄信（Gmail SMTP）
 
 ## 注意
 

@@ -74,7 +74,10 @@ export default function ReportPage() {
     if (tabPinned || !payload?.report.isHolding) {
       return;
     }
-    setActiveTab("position");
+    // Schedule outside the effect body to satisfy react-hooks/set-state-in-effect.
+    queueMicrotask(() => {
+      setActiveTab("position");
+    });
   }, [payload?.report.isHolding, tabPinned]);
 
   const report = payload?.report;

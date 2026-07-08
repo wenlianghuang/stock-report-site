@@ -112,6 +112,8 @@ export default function DashboardPage() {
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sendingDate, setSendingDate] = useState<string | null>(null);
+  const [sentNotice, setSentNotice] = useState<string>("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [openYears, setOpenYears] = useState<Record<string, boolean>>({});
   const [openMonths, setOpenMonths] = useState<Record<string, boolean>>({});
@@ -127,7 +129,10 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    void loadReports();
+    // Schedule outside the effect body to satisfy react-hooks/set-state-in-effect.
+    queueMicrotask(() => {
+      void loadReports();
+    });
   }, []);
 
   useEffect(() => {
@@ -140,12 +145,15 @@ export default function DashboardPage() {
     const seedDate = hasToday ? today : reportDateKey(reports[0]);
     const [yy, mm, dd] = seedDate.split("-");
     if (!yy || !mm || !dd) return;
-    setOpenYears((prev) => (prev[yy] ? prev : { ...prev, [yy]: true }));
-    setOpenMonths((prev) => {
-      const key = `${yy}-${mm}`;
-      return prev[key] ? prev : { ...prev, [key]: true };
+    // Schedule outside the effect body to satisfy react-hooks/set-state-in-effect.
+    queueMicrotask(() => {
+      setOpenYears((prev) => (prev[yy] ? prev : { ...prev, [yy]: true }));
+      setOpenMonths((prev) => {
+        const key = `${yy}-${mm}`;
+        return prev[key] ? prev : { ...prev, [key]: true };
+      });
+      setOpenDays((prev) => (prev[seedDate] ? prev : { ...prev, [seedDate]: true }));
     });
-    setOpenDays((prev) => (prev[seedDate] ? prev : { ...prev, [seedDate]: true }));
   }, [reports]);
 
   async function onSubmit(event: FormEvent) {
@@ -220,6 +228,29 @@ export default function DashboardPage() {
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     window.location.href = "/login";
+  }
+
+  async function sendDailyDigestEmail(date: string) {
+    setError("");
+    setSentNotice("");
+    setSendingDate(date);
+    try {
+      const response = await fetch("/api/email/daily-digest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date }),
+      });
+      const payload = (await response.json()) as { ok?: boolean; error?: string; subject?: string };
+      if (!response.ok) {
+        setError(payload.error ?? "寄送失敗");
+        return;
+      }
+      setSentNotice(payload.subject ? `已寄出：${payload.subject}` : "已寄出 Email");
+    } catch {
+      setError("網路錯誤，請稍後再試");
+    } finally {
+      setSendingDate(null);
+    }
   }
 
   const groupedReports = groupReportsByDate(reports);
@@ -306,6 +337,7 @@ export default function DashboardPage() {
           </p>
         </form>
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+        {sentNotice ? <p className="mt-3 text-sm text-emerald-700">{sentNotice}</p> : null}
       </section>
 
       <section>
@@ -383,15 +415,25 @@ export default function DashboardPage() {
                                     const isDayOpen = openDays[dayKey] ?? false;
                                     return (
                                       <li key={dayKey}>
-                                        <button
-                                          type="button"
+                                        <div
+                                          role="button"
+                                          tabIndex={0}
+                                          aria-expanded={isDayOpen}
                                           onClick={() =>
                                             setOpenDays((prev) => ({
                                               ...prev,
                                               [dayKey]: !(prev[dayKey] ?? false),
                                             }))
                                           }
-                                          className="flex w-full items-center justify-between gap-3 text-left"
+                                          onKeyDown={(event) => {
+                                            if (event.key !== "Enter" && event.key !== " ") return;
+                                            event.preventDefault();
+                                            setOpenDays((prev) => ({
+                                              ...prev,
+                                              [dayKey]: !(prev[dayKey] ?? false),
+                                            }));
+                                          }}
+                                          className="flex w-full cursor-pointer items-center justify-between gap-3 text-left"
                                         >
                                           <div className="flex items-center gap-2">
                                             <span className="text-sm text-zinc-500">
@@ -404,10 +446,23 @@ export default function DashboardPage() {
                                               {dayGroup.date}
                                             </span>
                                           </div>
-                                          <span className="text-xs text-zinc-500">
-                                            {dayGroup.reports.length} 份
-                                          </span>
-                                        </button>
+                                          <div className="flex items-center gap-3">
+                                            <span className="text-xs text-zinc-500">
+                                              {dayGroup.reports.length} 份
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={(event) => {
+                                                event.stopPropagation();
+                                                void sendDailyDigestEmail(dayGroup.date);
+                                              }}
+                                              disabled={sendingDate === dayGroup.date}
+                                              className="rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                                            >
+                                              {sendingDate === dayGroup.date ? "寄送中…" : "寄出彙整 Email"}
+                                            </button>
+                                          </div>
+                                        </div>
 
                                         {isDayOpen ? (
                                           <ul className="mt-2 divide-y divide-zinc-200 rounded-xl border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-950">

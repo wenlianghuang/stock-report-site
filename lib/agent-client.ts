@@ -18,6 +18,18 @@ type AgentJobResponse = {
   job: AgentJob;
 };
 
+type DigestItem = {
+  stockId: string;
+  stockName?: string;
+  tradeDate?: string;
+  markdown: string;
+  positionMarkdown?: string;
+};
+
+type DigestResponse = {
+  digest: { subject: string; main_detail_markdown: string };
+};
+
 type CreateAgentJobInput = {
   stockId: string;
   tradeDate?: string;
@@ -86,6 +98,38 @@ export async function getAgentJob(jobId: string): Promise<AgentJob> {
 
   const payload = (await response.json()) as AgentJobResponse;
   return payload.job;
+}
+
+export async function createDailyDigest(input: {
+  digestDate: string;
+  items: DigestItem[];
+}): Promise<{ subject: string; mainDetailMarkdown: string }> {
+  const response = await fetch(`${baseUrl()}/digest`, {
+    method: "POST",
+    headers: agentHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      digest_date: input.digestDate,
+      items: input.items.map((item) => ({
+        stock_id: item.stockId,
+        stock_name: item.stockName ?? null,
+        trade_date: item.tradeDate ?? null,
+        markdown: item.markdown,
+        position_markdown: item.positionMarkdown ?? null,
+      })),
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Agent API error ${response.status}`);
+  }
+
+  const payload = (await response.json()) as DigestResponse;
+  return {
+    subject: payload.digest.subject,
+    mainDetailMarkdown: payload.digest.main_detail_markdown,
+  };
 }
 
 export async function checkAgentHealth(): Promise<boolean> {

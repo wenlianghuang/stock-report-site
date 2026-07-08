@@ -132,6 +132,26 @@ export async function listReportsForUser(userId: string): Promise<ReportRecord[]
   return (data as ReportRow[]).map(rowToReport);
 }
 
+export async function listDoneReportsForUserByTradeDate(
+  userId: string,
+  tradeDate: string,
+): Promise<ReportRecord[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("reports")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "done")
+    .eq("trade_date", tradeDate)
+    .order("created_at", { ascending: true });
+
+  if (error || !data) {
+    return [];
+  }
+
+  return (data as ReportRow[]).map(rowToReport);
+}
+
 export function isValidStockId(value: string): boolean {
   return /^\d{4,6}$/.test(value.trim());
 }
