@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import type { ReportRecord, ReportRow } from "./types";
-import { rowToReport } from "./types";
+import type { HoldingRecord, HoldingRow, ReportRecord, ReportRow } from "./types";
+import { rowToHolding, rowToReport } from "./types";
 
 export async function createReport(input: {
   userId: string;
@@ -150,6 +150,53 @@ export async function listDoneReportsForUserByTradeDate(
   }
 
   return (data as ReportRow[]).map(rowToReport);
+}
+
+export async function findHoldingForUserStock(
+  userId: string,
+  stockId: string,
+): Promise<HoldingRecord | undefined> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("holdings")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("stock_id", stockId)
+    .maybeSingle();
+
+  if (error || !data) {
+    return undefined;
+  }
+
+  return rowToHolding(data as HoldingRow);
+}
+
+export async function upsertHoldingForUserStock(input: {
+  userId: string;
+  stockId: string;
+  shareCount: number;
+  avgCost: number;
+}): Promise<HoldingRecord> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("holdings")
+    .upsert(
+      {
+        user_id: input.userId,
+        stock_id: input.stockId,
+        share_count: input.shareCount,
+        avg_cost: input.avgCost,
+      },
+      { onConflict: "user_id,stock_id" },
+    )
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "無法儲存持股資料");
+  }
+
+  return rowToHolding(data as HoldingRow);
 }
 
 export function isValidStockId(value: string): boolean {

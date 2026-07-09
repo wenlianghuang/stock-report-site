@@ -6,7 +6,6 @@ import { ReportStatusBadge } from "@/components/ReportStatusBadge";
 import type { ReportRecord } from "@/lib/types";
 
 const CHIP_READY_MINUTES = 21 * 60 + 30;
-const HOLDING_STORAGE_PREFIX = "stock-report-site:holding:";
 
 type ReportGroup = {
   year: string;
@@ -110,6 +109,7 @@ export default function DashboardPage() {
   const [isHolding, setIsHolding] = useState(false);
   const [shareCount, setShareCount] = useState("");
   const [avgCost, setAvgCost] = useState("");
+  const [holdingLoadedFor, setHoldingLoadedFor] = useState<string | null>(null);
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -120,40 +120,9 @@ export default function DashboardPage() {
   const [openMonths, setOpenMonths] = useState<Record<string, boolean>>({});
   const [openDays, setOpenDays] = useState<Record<string, boolean>>({});
 
-  function holdingStorageKey(id: string) {
-    return `${HOLDING_STORAGE_PREFIX}${id}`;
-  }
-
-  function loadHoldingFromStorage(id: string) {
-    if (typeof window === "undefined") return null;
-    try {
-      const raw = window.localStorage.getItem(holdingStorageKey(id));
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as { shareCount?: string; avgCost?: string };
-      const nextShare = typeof parsed.shareCount === "string" ? parsed.shareCount : "";
-      const nextAvg = typeof parsed.avgCost === "string" ? parsed.avgCost : "";
-      if (!nextShare || !nextAvg) return null;
-      return { shareCount: nextShare, avgCost: nextAvg };
-    } catch {
-      return null;
-    }
-  }
-
-  function saveHoldingToStorage(id: string, holding: { shareCount: string; avgCost: string }) {
-    if (typeof window === "undefined") return;
-    if (!id) return;
-    try {
-      window.localStorage.setItem(
-        holdingStorageKey(id),
-        JSON.stringify({
-          shareCount: holding.shareCount,
-          avgCost: holding.avgCost,
-          updatedAt: new Date().toISOString(),
-        }),
-      );
-    } catch {
-      // ignore storage errors
-    }
+  function normalizedStockId(value: string) {
+    const id = value.trim();
+    return /^\d{4,6}$/.test(id) ? id : "";
   }
 
   async function loadReports() {
@@ -173,22 +142,72 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    const id = stockId.trim();
-    if (!/^\d{4,6}$/.test(id)) return;
-    const holding = loadHoldingFromStorage(id);
-    if (!holding) return;
-    queueMicrotask(() => {
-      setShareCount((prev) => (prev ? prev : holding.shareCount));
-      setAvgCost((prev) => (prev ? prev : holding.avgCost));
-    });
-  }, [stockId]);
+    if (!isHolding) return;
+    const id = normalizedStockId(stockId);
+    if (!id) return;
+    if (holdingLoadedFor === id) return;
+
+    const shouldAutofill = !shareCount || !avgCost;
+    if (!shouldAutofill) {
+      setHoldingLoadedFor(id);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(`/api/holdings?stockId=${encodeURIComponent(id)}`);
+        const data = (await response.json()) as {
+          holding?: { shareCount?: number; avgCost?: number } | null;
+          error?: string;
+        };
+        if (!response.ok) {
+          return;
+        }
+        if (cancelled) return;
+        if (!data.holding) {
+          setHoldingLoadedFor(id);
+          return;
+        }
+        setShareCount((prev) => (prev ? prev : String(data.holding?.shareCount ?? "")));
+        setAvgCost((prev) => (prev ? prev : String(data.holding?.avgCost ?? "")));
+        setHoldingLoadedFor(id);
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isHolding, stockId, holdingLoadedFor, shareCount, avgCost]);
 
   useEffect(() => {
     if (!isHolding) return;
-    const id = stockId.trim();
-    if (!/^\d{4,6}$/.test(id)) return;
+    const id = normalizedStockId(stockId);
+    if (!id) return;
     if (!shareCount || !avgCost) return;
-    saveHoldingToStorage(id, { shareCount, avgCost });
+
+    const nextShare = Number(shareCount);
+    const nextAvg = Number(avgCost);
+    if (!Number.isFinite(nextShare) || nextShare <= 0) return;
+    if (!Number.isFinite(nextAvg) || nextAvg <= 0) return;
+
+    const handle = window.setTimeout(() => {
+      void fetch("/api/holdings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stockId: id,
+          shareCount: nextShare,
+          avgCost: nextAvg,
+        }),
+      });
+    }, 400);
+
+    return () => {
+      window.clearTimeout(handle);
+    };
   }, [isHolding, stockId, shareCount, avgCost]);
 
   useEffect(() => {
@@ -345,18 +364,7 @@ export default function DashboardPage() {
               <input
                 type="checkbox"
                 checked={isHolding}
-                onChange={(event) => {
-                  const next = event.target.checked;
-                  setIsHolding(next);
-                  if (!next) return;
-                  const id = stockId.trim();
-                  if (!/^\d{4,6}$/.test(id)) return;
-                  if (shareCount && avgCost) return;
-                  const holding = loadHoldingFromStorage(id);
-                  if (!holding) return;
-                  setShareCount((prev) => (prev ? prev : holding.shareCount));
-                  setAvgCost((prev) => (prev ? prev : holding.avgCost));
-                }}
+                onChange={(event) => setIsHolding(event.target.checked)}
                 className="h-4 w-4 rounded border-zinc-300"
               />
               有持股

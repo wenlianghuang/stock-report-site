@@ -61,6 +61,26 @@ export type AgentJob = {
   avg_cost?: number | null;
 };
 
+export type HoldingRecord = {
+  id: string;
+  userId: string;
+  stockId: string;
+  shareCount: number;
+  avgCost: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HoldingRow = {
+  id: string;
+  user_id: string;
+  stock_id: string;
+  share_count: number;
+  avg_cost: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export function rowToReport(row: ReportRow): ReportRecord {
   return {
     id: row.id,
@@ -78,5 +98,17 @@ export function rowToReport(row: ReportRow): ReportRecord {
     shareCount: row.share_count ?? undefined,
     avgCost: row.avg_cost ?? undefined,
     positionMarkdown: row.position_markdown ?? undefined,
+  };
+}
+
+export function rowToHolding(row: HoldingRow): HoldingRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    stockId: row.stock_id,
+    shareCount: row.share_count,
+    avgCost: Number(row.avg_cost),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
