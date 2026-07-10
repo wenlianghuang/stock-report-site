@@ -6,6 +6,7 @@ import type {
   HoldingRow,
   ReportRecord,
   ReportRow,
+  ReportSummaryJson,
 } from "./types";
 import { rowToHolding, rowToReport } from "./types";
 
@@ -58,11 +59,15 @@ export async function updateReport(
       | "stockName"
       | "factsJson"
       | "historyJson"
+      | "summaryJson"
     >
   >,
 ): Promise<ReportRecord | undefined> {
   const supabase = await createClient();
-  const payload: Record<string, string | null | undefined | ChipFacts | HistoryDay[]> = {};
+  const payload: Record<
+    string,
+    string | null | undefined | ChipFacts | HistoryDay[] | ReportSummaryJson
+  > = {};
 
   if (patch.status !== undefined) {
     payload.status = patch.status;
@@ -87,6 +92,9 @@ export async function updateReport(
   }
   if (patch.historyJson !== undefined) {
     payload.history_json = patch.historyJson;
+  }
+  if (patch.summaryJson !== undefined) {
+    payload.summary_json = patch.summaryJson;
   }
 
   const { data, error } = await supabase

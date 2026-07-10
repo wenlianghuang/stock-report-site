@@ -69,6 +69,9 @@ export async function GET(_request: Request, context: RouteContext) {
     if (agentJob.history_json) {
       patch.historyJson = agentJob.history_json;
     }
+    if (agentJob.summary_json) {
+      patch.summaryJson = agentJob.summary_json;
+    }
 
     if (Object.keys(patch).length > 0) {
       await updateReport(report.id, patch);

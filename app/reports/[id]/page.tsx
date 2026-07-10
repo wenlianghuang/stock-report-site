@@ -5,13 +5,14 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MarkdownReport } from "@/components/MarkdownReport";
 import { ReportChartsPanel } from "@/components/ReportChartsPanel";
+import { ReportSummaryPanel } from "@/components/ReportSummaryPanel";
 import {
   ReportStatusBadge,
   statusHint,
 } from "@/components/ReportStatusBadge";
 import type { ReportRecord, ReportStatus } from "@/lib/types";
 
-type ReportTab = "chart" | "market" | "position";
+type ReportTab = "summary" | "chart" | "market" | "position";
 
 type ReportPayload = {
   report: ReportRecord;
@@ -92,6 +93,7 @@ export default function ReportPage() {
   const status = report?.status;
   const hasPositionReport = Boolean(report?.isHolding);
   const hasChartData = Boolean(report?.factsJson && report?.historyJson?.length);
+  const hasSummary = Boolean(report?.summaryJson?.market);
   const marketMarkdown = payload?.markdown ?? report?.markdown ?? null;
   const positionMarkdown =
     payload?.positionMarkdown ?? report?.positionMarkdown ?? null;
@@ -136,6 +138,25 @@ export default function ReportPage() {
   }
 
   function renderTabContent() {
+    if (activeTab === "summary") {
+      if (!hasSummary) {
+        return (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            {status === "gating" || status === "positioning"
+              ? "視覺摘要產生中…"
+              : "視覺摘要尚未就緒。"}
+          </p>
+        );
+      }
+
+      return (
+        <ReportSummaryPanel
+          summary={report!.summaryJson!}
+          facts={report?.factsJson}
+        />
+      );
+    }
+
     if (activeTab === "chart") {
       if (!hasChartData) {
         return (
@@ -249,6 +270,13 @@ export default function ReportPage() {
       {showContentPanel ? (
         <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
           <div className="mb-4 flex flex-wrap gap-2 border-b border-zinc-200 pb-3 dark:border-zinc-800">
+            <button
+              type="button"
+              onClick={() => selectTab("summary")}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tabClass(activeTab === "summary")}`}
+            >
+              視覺摘要
+            </button>
             <button
               type="button"
               onClick={() => selectTab("chart")}

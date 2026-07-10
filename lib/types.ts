@@ -1,3 +1,94 @@
+export type SummaryTone = "bullish" | "bearish" | "neutral" | "info";
+
+export type SignalMatrixRow = {
+  category: "technical" | "chip" | "market";
+  label: string;
+  value: string;
+  tone: SummaryTone;
+};
+
+export type SummaryNewsItem = {
+  date: string;
+  title: string;
+  category: string;
+  summary: string;
+};
+
+export type SummaryScenario = {
+  title?: string;
+  content: string;
+};
+
+export type InstitutionalFlowDay = {
+  date: string;
+  foreign?: number;
+  trust?: number;
+  dealer?: number;
+  major?: number | null;
+};
+
+export type MarketSummary = {
+  version: number;
+  stock_id: string;
+  stock_name: string;
+  trade_date: string;
+  signal_matrix: SignalMatrixRow[];
+  key_metrics: {
+    close?: number;
+    today_change_pct?: number;
+    period_return_pct?: number;
+    foreign_net_lots?: number;
+    trust_net_lots?: number;
+    dealer_net_lots?: number;
+    major_net_lots?: number;
+    volume_today_lots?: number;
+    market_change_pct?: number;
+  };
+  institutional_flow: InstitutionalFlowDay[];
+  news: SummaryNewsItem[];
+  narrative: {
+    today_chip?: string | null;
+    trend?: string | null;
+    cross_points: string[];
+    scenarios: SummaryScenario[];
+    watch_items: string[];
+  };
+  anchors: string[];
+};
+
+export type PositionScenarioPlan = {
+  rank: string;
+  label: string;
+  weight_pct: number;
+  action: string;
+  trigger_hint: string;
+};
+
+export type PositionSummary = {
+  version: number;
+  unrealized_pnl_pct?: number | null;
+  pnl_bucket?: string;
+  pnl_bucket_label?: string;
+  position_bias?: string;
+  position_bias_label?: string;
+  avg_cost?: number;
+  shares?: number;
+  scenario_plan: PositionScenarioPlan[];
+  narrative: {
+    position_status?: string | null;
+    market_summary?: string | null;
+    cross_points: string[];
+    scenarios: SummaryScenario[];
+    risk_items: string[];
+  };
+  anchors: string[];
+};
+
+export type ReportSummaryJson = {
+  market: MarketSummary;
+  position?: PositionSummary;
+};
+
 export type ReportStatus =
   | "queued"
   | "fetching"
@@ -64,6 +155,7 @@ export type ReportRecord = {
   positionMarkdown?: string;
   factsJson?: ChipFacts;
   historyJson?: HistoryDay[];
+  summaryJson?: ReportSummaryJson;
 };
 
 export type ReportRow = {
@@ -82,6 +174,7 @@ export type ReportRow = {
   position_markdown: string | null;
   facts_json: ChipFacts | null;
   history_json: HistoryDay[] | null;
+  summary_json: ReportSummaryJson | null;
   created_at: string;
   updated_at: string;
 };
@@ -102,6 +195,7 @@ export type AgentJob = {
   csv_path?: string | null;
   facts_json?: ChipFacts | null;
   history_json?: HistoryDay[] | null;
+  summary_json?: ReportSummaryJson | null;
   is_holding?: boolean;
   share_count?: number | null;
   avg_cost?: number | null;
@@ -146,6 +240,7 @@ export function rowToReport(row: ReportRow): ReportRecord {
     positionMarkdown: row.position_markdown ?? undefined,
     factsJson: row.facts_json ?? undefined,
     historyJson: row.history_json ?? undefined,
+    summaryJson: row.summary_json ?? undefined,
   };
 }
 

@@ -17,6 +17,7 @@ create table if not exists public.reports (
   position_markdown text,
   facts_json jsonb,
   history_json jsonb,
+  summary_json jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint reports_holding_share_count_check
