@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 
-const IDLE_MS = 5 * 60 * 1000;
+const IDLE_MS = 10 * 60 * 1000;
 const PUBLIC_PATHS = ["/login", "/signup"];
 
 const ACTIVITY_EVENTS = [
