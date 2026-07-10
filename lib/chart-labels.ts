@@ -12,6 +12,13 @@ export const MA20_SLOPE_LABEL: Record<string, string> = {
   unknown: "月線斜率資料不足",
 };
 
+export const RSI_ZONE_LABEL: Record<string, string> = {
+  overbought: "RSI 偏高（動能過熱）",
+  oversold: "RSI 偏低（動能偏弱）",
+  neutral: "RSI 中性區",
+  unknown: "RSI 資料不足",
+};
+
 export const CHIP_REGIME_LABEL: Record<string, string> = {
   accumulation: "籌碼偏多",
   distribution: "籌碼偏空",
@@ -73,6 +80,12 @@ export function toneForRs(value?: string): BadgeTone {
 export function toneForMa20Slope(value?: string): BadgeTone {
   if (value === "rising") return "bullish";
   if (value === "falling") return "bearish";
+  return "neutral";
+}
+
+export function toneForRsiZone(value?: string): BadgeTone {
+  if (value === "oversold") return "bullish";
+  if (value === "overbought") return "bearish";
   return "neutral";
 }
 

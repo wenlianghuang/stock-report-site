@@ -5,6 +5,7 @@ import {
   MA20_SLOPE_LABEL,
   MA_ALIGNMENT_LABEL,
   MA_STACK_LABEL,
+  RSI_ZONE_LABEL,
   RS_LABEL,
   VOLUME_ANOMALY_LABEL,
   type BadgeTone,
@@ -13,6 +14,7 @@ import {
   toneForMa20Slope,
   toneForMaStack,
   toneForRs,
+  toneForRsiZone,
   toneForVolume,
 } from "@/lib/chart-labels";
 
@@ -54,6 +56,13 @@ export function buildFactsBadges(facts: ChipFacts): BadgeItem[] {
     badges,
     facts.ma20_slope ? MA20_SLOPE_LABEL[facts.ma20_slope] : undefined,
     toneForMa20Slope(facts.ma20_slope),
+  );
+  pushBadge(
+    badges,
+    facts.rsi_zone && facts.rsi_14 != null
+      ? `${RSI_ZONE_LABEL[facts.rsi_zone] ?? facts.rsi_zone}（${facts.rsi_14.toFixed(1)}）`
+      : undefined,
+    toneForRsiZone(facts.rsi_zone),
   );
   pushBadge(
     badges,

@@ -117,6 +117,8 @@ export type ChipFacts = {
   ma_stack?: string;
   ma20_slope?: string;
   ma20_slope_pct?: number | null;
+  rsi_14?: number | null;
+  rsi_zone?: string;
   institutional_consensus?: string;
   chip_regime?: string;
   volume_anomaly?: string;

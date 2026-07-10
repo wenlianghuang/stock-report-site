@@ -1,5 +1,6 @@
 import { FactsBadges } from "@/components/FactsBadges";
 import { StockPriceChart } from "@/components/StockPriceChart";
+import { RSI_ZONE_LABEL } from "@/lib/chart-labels";
 import { buildChartPoints } from "@/lib/chart-utils";
 import type { ChipFacts, HistoryDay } from "@/lib/types";
 
@@ -42,6 +43,17 @@ export function ReportChartsPanel({
             <div>
               <dt className="text-zinc-500">MA20</dt>
               <dd className="font-medium">{lastPoint.ma20.toFixed(2)}</dd>
+            </div>
+          ) : null}
+          {facts.rsi_14 != null && facts.rsi_zone && facts.rsi_zone !== "unknown" ? (
+            <div>
+              <dt className="text-zinc-500">RSI14</dt>
+              <dd className="font-medium">
+                {facts.rsi_14.toFixed(1)}
+                <span className="ml-1 text-xs font-normal text-zinc-500">
+                  {RSI_ZONE_LABEL[facts.rsi_zone] ?? facts.rsi_zone}
+                </span>
+              </dd>
             </div>
           ) : null}
         </dl>
