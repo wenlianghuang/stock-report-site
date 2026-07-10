@@ -4,11 +4,14 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MarkdownReport } from "@/components/MarkdownReport";
+import { ReportChartsPanel } from "@/components/ReportChartsPanel";
 import {
   ReportStatusBadge,
   statusHint,
 } from "@/components/ReportStatusBadge";
 import type { ReportRecord, ReportStatus } from "@/lib/types";
+
+type ReportTab = "chart" | "market" | "position";
 
 type ReportPayload = {
   report: ReportRecord;
@@ -17,13 +20,19 @@ type ReportPayload = {
   error?: string;
 };
 
+function tabClass(active: boolean): string {
+  return active
+    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+    : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900";
+}
+
 export default function ReportPage() {
   const params = useParams<{ id: string }>();
   const reportId = params.id;
   const [payload, setPayload] = useState<ReportPayload | null>(null);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
-  const [activeTab, setActiveTab] = useState<"market" | "position">("market");
+  const [activeTab, setActiveTab] = useState<ReportTab>("chart");
   const [tabPinned, setTabPinned] = useState(false);
 
   useEffect(() => {
@@ -71,21 +80,26 @@ export default function ReportPage() {
   }, [reportId]);
 
   useEffect(() => {
-    if (tabPinned || !payload?.report.isHolding) {
+    if (tabPinned || !payload?.report) {
       return;
     }
-    // Schedule outside the effect body to satisfy react-hooks/set-state-in-effect.
     queueMicrotask(() => {
-      setActiveTab("position");
+      setActiveTab(payload.report.isHolding ? "position" : "chart");
     });
-  }, [payload?.report.isHolding, tabPinned]);
+  }, [payload?.report, tabPinned]);
 
   const report = payload?.report;
   const status = report?.status;
   const hasPositionReport = Boolean(report?.isHolding);
+  const hasChartData = Boolean(report?.factsJson && report?.historyJson?.length);
   const marketMarkdown = payload?.markdown ?? report?.markdown ?? null;
   const positionMarkdown =
     payload?.positionMarkdown ?? report?.positionMarkdown ?? null;
+
+  function selectTab(tab: ReportTab) {
+    setTabPinned(true);
+    setActiveTab(tab);
+  }
 
   async function onDelete() {
     if (!report) {
@@ -120,6 +134,66 @@ export default function ReportPage() {
       setDeleting(false);
     }
   }
+
+  function renderTabContent() {
+    if (activeTab === "chart") {
+      if (!hasChartData) {
+        return (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            {status === "fetching"
+              ? "籌碼資料抓取中，圖表將在資料就緒後顯示…"
+              : status === "gating" || status === "positioning"
+                ? "報告產生中，圖表資料同步中…"
+                : "圖表資料尚未就緒。"}
+          </p>
+        );
+      }
+
+      return (
+        <ReportChartsPanel
+          facts={report!.factsJson!}
+          history={report!.historyJson!}
+          avgCost={report?.isHolding ? report.avgCost : undefined}
+        />
+      );
+    }
+
+    if (activeTab === "position") {
+      if (!positionMarkdown) {
+        return (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            {status === "positioning"
+              ? "部位決策報告產生中…"
+              : status === "gating"
+                ? "市場報告完成後將接續產出部位決策報告…"
+                : "部位決策報告尚未就緒。"}
+          </p>
+        );
+      }
+      return <MarkdownReport markdown={positionMarkdown} />;
+    }
+
+    if (!marketMarkdown) {
+      return (
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          {status === "gating" || status === "fetching"
+            ? "市場報告產生中…"
+            : "市場報告尚未就緒。"}
+        </p>
+      );
+    }
+
+    return <MarkdownReport markdown={marketMarkdown} />;
+  }
+
+  const showContentPanel =
+    Boolean(payload) ||
+    Boolean(marketMarkdown) ||
+    Boolean(positionMarkdown) ||
+    Boolean(report?.isHolding) ||
+    status === "fetching" ||
+    status === "gating" ||
+    status === "positioning";
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-10">
@@ -172,57 +246,34 @@ export default function ReportPage() {
         </pre>
       ) : null}
 
-      {payload?.markdown || positionMarkdown || report?.isHolding ? (
+      {showContentPanel ? (
         <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-          {hasPositionReport ? (
-            <div className="mb-4 flex gap-2 border-b border-zinc-200 pb-3 dark:border-zinc-800">
+          <div className="mb-4 flex flex-wrap gap-2 border-b border-zinc-200 pb-3 dark:border-zinc-800">
+            <button
+              type="button"
+              onClick={() => selectTab("chart")}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tabClass(activeTab === "chart")}`}
+            >
+              圖表
+            </button>
+            <button
+              type="button"
+              onClick={() => selectTab("market")}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tabClass(activeTab === "market")}`}
+            >
+              市場報告
+            </button>
+            {hasPositionReport ? (
               <button
                 type="button"
-                onClick={() => {
-                  setTabPinned(true);
-                  setActiveTab("position");
-                }}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                  activeTab === "position"
-                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900"
-                }`}
+                onClick={() => selectTab("position")}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tabClass(activeTab === "position")}`}
               >
                 部位報告
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setTabPinned(true);
-                  setActiveTab("market");
-                }}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                  activeTab === "market"
-                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900"
-                }`}
-              >
-                市場報告
-              </button>
-            </div>
-          ) : null}
-          {report?.isHolding && activeTab === "position" && !positionMarkdown ? (
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              {status === "positioning"
-                ? "部位決策報告產生中…"
-                : status === "gating"
-                  ? "市場報告完成後將接續產出部位決策報告…"
-                  : "部位決策報告尚未就緒。"}
-            </p>
-          ) : activeTab === "position" && positionMarkdown ? (
-            <MarkdownReport markdown={positionMarkdown} />
-          ) : !report?.isHolding && marketMarkdown ? (
-            <MarkdownReport markdown={marketMarkdown} />
-          ) : report?.isHolding && positionMarkdown ? (
-            <MarkdownReport markdown={positionMarkdown} />
-          ) : marketMarkdown ? (
-            <MarkdownReport markdown={marketMarkdown} />
-          ) : null}
+            ) : null}
+          </div>
+          {renderTabContent()}
         </div>
       ) : null}
 

@@ -1,5 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
-import type { HoldingRecord, HoldingRow, ReportRecord, ReportRow } from "./types";
+import type {
+  ChipFacts,
+  HistoryDay,
+  HoldingRecord,
+  HoldingRow,
+  ReportRecord,
+  ReportRow,
+} from "./types";
 import { rowToHolding, rowToReport } from "./types";
 
 export async function createReport(input: {
@@ -49,11 +56,13 @@ export async function updateReport(
       | "markdown"
       | "positionMarkdown"
       | "stockName"
+      | "factsJson"
+      | "historyJson"
     >
   >,
 ): Promise<ReportRecord | undefined> {
   const supabase = await createClient();
-  const payload: Record<string, string | null | undefined> = {};
+  const payload: Record<string, string | null | undefined | ChipFacts | HistoryDay[]> = {};
 
   if (patch.status !== undefined) {
     payload.status = patch.status;
@@ -72,6 +81,12 @@ export async function updateReport(
   }
   if (patch.stockName !== undefined) {
     payload.stock_name = patch.stockName;
+  }
+  if (patch.factsJson !== undefined) {
+    payload.facts_json = patch.factsJson;
+  }
+  if (patch.historyJson !== undefined) {
+    payload.history_json = patch.historyJson;
   }
 
   const { data, error } = await supabase

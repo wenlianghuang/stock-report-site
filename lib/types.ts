@@ -6,6 +6,43 @@ export type ReportStatus =
   | "done"
   | "failed";
 
+export type ChipFacts = {
+  stock_id?: string;
+  stock_name?: string;
+  trade_date?: string;
+  close?: number | null;
+  ma5?: number | null;
+  ma10?: number | null;
+  ma20?: number | null;
+  close_vs_ma20_pct?: number | null;
+  period_return_pct?: number | null;
+  price_trend?: string;
+  ma5_position?: string;
+  ma10_position?: string;
+  ma20_position?: string;
+  ma_alignment?: string;
+  ma_short_alignment?: string;
+  ma_mid_alignment?: string;
+  ma_stack?: string;
+  ma20_slope?: string;
+  ma20_slope_pct?: number | null;
+  institutional_consensus?: string;
+  chip_regime?: string;
+  volume_anomaly?: string;
+  rs_today?: string;
+  rs_period?: string;
+  market_trend?: string;
+  divergences?: string[];
+  anchors?: string[];
+};
+
+export type HistoryDay = {
+  date: string;
+  close: number;
+  volume?: number;
+  change_pct?: number;
+};
+
 export type ReportRecord = {
   id: string;
   userId: string;
@@ -22,6 +59,8 @@ export type ReportRecord = {
   shareCount?: number;
   avgCost?: number;
   positionMarkdown?: string;
+  factsJson?: ChipFacts;
+  historyJson?: HistoryDay[];
 };
 
 export type ReportRow = {
@@ -38,6 +77,8 @@ export type ReportRow = {
   share_count: number | null;
   avg_cost: number | null;
   position_markdown: string | null;
+  facts_json: ChipFacts | null;
+  history_json: HistoryDay[] | null;
   created_at: string;
   updated_at: string;
 };
@@ -56,6 +97,8 @@ export type AgentJob = {
   position_markdown?: string | null;
   md_path?: string | null;
   csv_path?: string | null;
+  facts_json?: ChipFacts | null;
+  history_json?: HistoryDay[] | null;
   is_holding?: boolean;
   share_count?: number | null;
   avg_cost?: number | null;
@@ -98,6 +141,8 @@ export function rowToReport(row: ReportRow): ReportRecord {
     shareCount: row.share_count ?? undefined,
     avgCost: row.avg_cost ?? undefined,
     positionMarkdown: row.position_markdown ?? undefined,
+    factsJson: row.facts_json ?? undefined,
+    historyJson: row.history_json ?? undefined,
   };
 }
 

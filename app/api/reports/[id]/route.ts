@@ -28,6 +28,8 @@ export async function GET(_request: Request, context: RouteContext) {
     report.status === "done" &&
     report.markdown &&
     report.stockName &&
+    report.factsJson &&
+    report.historyJson &&
     (!report.isHolding || report.positionMarkdown);
 
   if (canReturnCached) {
@@ -60,6 +62,12 @@ export async function GET(_request: Request, context: RouteContext) {
     }
     if (agentJob.stock_name) {
       patch.stockName = agentJob.stock_name;
+    }
+    if (agentJob.facts_json) {
+      patch.factsJson = agentJob.facts_json;
+    }
+    if (agentJob.history_json) {
+      patch.historyJson = agentJob.history_json;
     }
 
     if (Object.keys(patch).length > 0) {

@@ -1,0 +1,51 @@
+import { FactsBadges } from "@/components/FactsBadges";
+import { StockPriceChart } from "@/components/StockPriceChart";
+import { buildChartPoints } from "@/lib/chart-utils";
+import type { ChipFacts, HistoryDay } from "@/lib/types";
+
+type ReportChartsPanelProps = {
+  facts: ChipFacts;
+  history: HistoryDay[];
+  avgCost?: number;
+};
+
+export function ReportChartsPanel({
+  facts,
+  history,
+  avgCost,
+}: ReportChartsPanelProps) {
+  const lastPoint = buildChartPoints(history).at(-1);
+
+  return (
+    <div className="flex flex-col gap-6">
+      <FactsBadges facts={facts} />
+      <StockPriceChart history={history} avgCost={avgCost} />
+      {lastPoint ? (
+        <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+          <div>
+            <dt className="text-zinc-500">收盤</dt>
+            <dd className="font-medium">{lastPoint.close.toFixed(2)}</dd>
+          </div>
+          {lastPoint.ma5 != null ? (
+            <div>
+              <dt className="text-zinc-500">MA5</dt>
+              <dd className="font-medium">{lastPoint.ma5.toFixed(2)}</dd>
+            </div>
+          ) : null}
+          {lastPoint.ma10 != null ? (
+            <div>
+              <dt className="text-zinc-500">MA10</dt>
+              <dd className="font-medium">{lastPoint.ma10.toFixed(2)}</dd>
+            </div>
+          ) : null}
+          {lastPoint.ma20 != null ? (
+            <div>
+              <dt className="text-zinc-500">MA20</dt>
+              <dd className="font-medium">{lastPoint.ma20.toFixed(2)}</dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
+    </div>
+  );
+}
