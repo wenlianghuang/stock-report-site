@@ -6,7 +6,6 @@ import {
   CartesianGrid,
   Cell,
   ComposedChart,
-  Customized,
   Legend,
   Line,
   ReferenceLine,
@@ -15,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { CandlestickOverlay, type CandlestickOverlayProps } from "@/components/CandlestickOverlay";
+import { CandlestickLayer } from "@/components/CandlestickLayer";
 import { CHART_COLORS, candleColor } from "@/lib/chart-colors";
 import {
   buildChartPoints,
@@ -122,6 +121,7 @@ export function StockPriceChart({ history, avgCost }: StockPriceChartProps) {
               tick={{ fontSize: 12 }}
             />
             <Tooltip content={<PriceTooltip />} />
+            <CandlestickLayer data={data} />
             <Legend />
             <Line
               yAxisId="price"
@@ -187,11 +187,6 @@ export function StockPriceChart({ history, avgCost }: StockPriceChartProps) {
                 }}
               />
             ) : null}
-            <Customized
-              component={(props: CandlestickOverlayProps) => (
-                <CandlestickOverlay {...props} data={data} />
-              )}
-            />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
