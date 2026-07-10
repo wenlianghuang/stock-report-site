@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "台股籌碼報告",
-  description: "台股籌碼分析報告 — tw-stock-report + report-gate",
+  title: "投資研究首頁",
+  description: "台股籌碼報告與美股研究入口",
 };
 
 export default function RootLayout({

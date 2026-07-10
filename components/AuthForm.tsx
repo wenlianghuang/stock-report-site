@@ -45,7 +45,7 @@ export function AuthForm({ mode }: AuthFormProps) {
         return;
       }
 
-      router.push("/dashboard");
+      router.push("/");
       router.refresh();
     } catch (error) {
       const message = error instanceof Error ? error.message : "網路錯誤，請稍後再試";

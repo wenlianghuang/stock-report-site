@@ -128,7 +128,7 @@ export default function ReportPage() {
         return;
       }
 
-      window.location.href = "/dashboard";
+      window.location.href = "/";
     } catch {
       setError("網路錯誤，請稍後再試");
       setDeleting(false);
@@ -200,7 +200,7 @@ export default function ReportPage() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <Link
-            href="/dashboard"
+            href="/"
             className="text-sm text-zinc-600 underline dark:text-zinc-400"
           >
             ← 返回
