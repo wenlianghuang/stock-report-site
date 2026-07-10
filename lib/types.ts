@@ -39,6 +39,9 @@ export type ChipFacts = {
 export type HistoryDay = {
   date: string;
   close: number;
+  open?: number;
+  high?: number;
+  low?: number;
   volume?: number;
   change_pct?: number;
 };
