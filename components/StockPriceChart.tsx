@@ -8,6 +8,7 @@ import {
   ComposedChart,
   Legend,
   Line,
+  LineChart,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -15,12 +16,15 @@ import {
   YAxis,
 } from "recharts";
 import { CandlestickLayer } from "@/components/CandlestickLayer";
+import { RSI_ZONE_LABEL } from "@/lib/chart-labels";
 import { CHART_COLORS, candleColor } from "@/lib/chart-colors";
 import {
   buildChartPoints,
   formatChartDate,
   formatPrice,
+  formatRsi,
   formatVolume,
+  rsiZone,
   type ChartPoint,
 } from "@/lib/chart-utils";
 import type { HistoryDay } from "@/lib/types";
@@ -89,8 +93,40 @@ function VolumeTooltip({
   );
 }
 
+function RsiTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: { payload: ChartPoint }[];
+  label?: string;
+}) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  const point = payload[0]?.payload;
+  if (!point || point.rsi14 == null) {
+    return null;
+  }
+
+  const zone = rsiZone(point.rsi14);
+
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs shadow-md dark:border-zinc-700 dark:bg-zinc-900">
+      <p className="mb-1 font-medium text-zinc-900 dark:text-zinc-100">日期：{label}</p>
+      <p>RSI14：{formatRsi(point.rsi14)}</p>
+      {zone !== "unknown" ? (
+        <p className="text-zinc-500">{RSI_ZONE_LABEL[zone]}</p>
+      ) : null}
+    </div>
+  );
+}
+
 export function StockPriceChart({ history, avgCost }: StockPriceChartProps) {
   const data = buildChartPoints(history);
+  const hasRsi = data.some((point) => point.rsi14 != null);
 
   if (data.length === 0) {
     return (
@@ -203,12 +239,7 @@ export function StockPriceChart({ history, avgCost }: StockPriceChartProps) {
               stroke={CHART_COLORS.grid}
               vertical={false}
             />
-            <XAxis
-              dataKey="date"
-              tickFormatter={formatChartDate}
-              minTickGap={24}
-              tick={{ fontSize: 12 }}
-            />
+            <XAxis dataKey="date" hide />
             <YAxis
               tickFormatter={formatVolume}
               width={56}
@@ -227,6 +258,58 @@ export function StockPriceChart({ history, avgCost }: StockPriceChartProps) {
           </BarChart>
         </ResponsiveContainer>
       </div>
+
+      {hasRsi ? (
+        <div className="h-[110px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={data}
+              syncId="stock-chart"
+              margin={{ top: 0, right: 12, left: 0, bottom: 0 }}
+            >
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke={CHART_COLORS.grid}
+                vertical={false}
+              />
+              <XAxis
+                dataKey="date"
+                tickFormatter={formatChartDate}
+                minTickGap={24}
+                tick={{ fontSize: 12 }}
+              />
+              <YAxis
+                domain={[0, 100]}
+                ticks={[30, 50, 70]}
+                width={56}
+                tick={{ fontSize: 11 }}
+              />
+              <Tooltip content={<RsiTooltip />} />
+              <ReferenceLine
+                y={70}
+                stroke={CHART_COLORS.rsiOverbought}
+                strokeDasharray="4 4"
+                strokeOpacity={0.6}
+              />
+              <ReferenceLine
+                y={30}
+                stroke={CHART_COLORS.rsiOversold}
+                strokeDasharray="4 4"
+                strokeOpacity={0.6}
+              />
+              <Line
+                type="monotone"
+                dataKey="rsi14"
+                name="RSI14"
+                stroke={CHART_COLORS.rsi}
+                strokeWidth={1.5}
+                dot={false}
+                connectNulls
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,5 +1,9 @@
 import type { HistoryDay } from "./types";
 
+export const RSI_PERIOD = 14;
+export const RSI_OVERBOUGHT = 70;
+export const RSI_OVERSOLD = 30;
+
 export type ChartPoint = {
   date: string;
   open: number;
@@ -10,6 +14,7 @@ export type ChartPoint = {
   ma5: number | null;
   ma10: number | null;
   ma20: number | null;
+  rsi14: number | null;
   isUp: boolean;
 };
 
@@ -22,6 +27,63 @@ function movingAverage(values: number[], index: number, period: number): number 
     return null;
   }
   return slice.reduce((sum, value) => sum + value, 0) / period;
+}
+
+function rsiFromAverages(avgGain: number, avgLoss: number): number {
+  if (avgLoss === 0) {
+    return avgGain > 0 ? 100 : 50;
+  }
+  const rs = avgGain / avgLoss;
+  return Math.round((100 - 100 / (1 + rs)) * 100) / 100;
+}
+
+/** Wilder RSI series aligned with backend chip_signals._rsi_wilder. */
+export function computeRsiSeries(
+  closes: number[],
+  period: number = RSI_PERIOD,
+): (number | null)[] {
+  const result: (number | null)[] = closes.map(() => null);
+  if (closes.length < period + 1) {
+    return result;
+  }
+
+  let avgGain = 0;
+  let avgLoss = 0;
+  for (let index = 1; index <= period; index += 1) {
+    const delta = closes[index] - closes[index - 1];
+    if (delta > 0) {
+      avgGain += delta;
+    } else {
+      avgLoss -= delta;
+    }
+  }
+  avgGain /= period;
+  avgLoss /= period;
+  result[period] = rsiFromAverages(avgGain, avgLoss);
+
+  for (let index = period + 1; index < closes.length; index += 1) {
+    const delta = closes[index] - closes[index - 1];
+    const gain = Math.max(delta, 0);
+    const loss = Math.max(-delta, 0);
+    avgGain = (avgGain * (period - 1) + gain) / period;
+    avgLoss = (avgLoss * (period - 1) + loss) / period;
+    result[index] = rsiFromAverages(avgGain, avgLoss);
+  }
+
+  return result;
+}
+
+export function rsiZone(value: number | null): "overbought" | "oversold" | "neutral" | "unknown" {
+  if (value == null) {
+    return "unknown";
+  }
+  if (value >= RSI_OVERBOUGHT) {
+    return "overbought";
+  }
+  if (value <= RSI_OVERSOLD) {
+    return "oversold";
+  }
+  return "neutral";
 }
 
 function normalizeOhlc(
@@ -43,6 +105,7 @@ function normalizeOhlc(
 
 export function buildChartPoints(history: HistoryDay[]): ChartPoint[] {
   const closes = history.map((day) => day.close);
+  const rsiSeries = computeRsiSeries(closes);
   let prevClose: number | null = null;
 
   return history.map((day, index) => {
@@ -56,6 +119,7 @@ export function buildChartPoints(history: HistoryDay[]): ChartPoint[] {
       ma5: movingAverage(closes, index, 5),
       ma10: movingAverage(closes, index, 10),
       ma20: movingAverage(closes, index, 20),
+      rsi14: rsiSeries[index],
     };
   });
 }
@@ -77,4 +141,8 @@ export function formatVolume(value: number): string {
     return `${(value / 10000).toFixed(1)}萬`;
   }
   return value.toLocaleString("zh-TW");
+}
+
+export function formatRsi(value: number): string {
+  return value.toFixed(1);
 }
