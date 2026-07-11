@@ -142,6 +142,27 @@ export function TwStockDashboard() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/trading-date");
+        if (!response.ok) {
+          return;
+        }
+        const data = (await response.json()) as { tradeDate?: string };
+        if (!cancelled && data.tradeDate) {
+          setTradeDate(data.tradeDate);
+        }
+      } catch {
+        // keep fallback default
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isHolding) return;
     const id = normalizedStockId(stockId);
     if (!id) return;
@@ -212,12 +233,7 @@ export function TwStockDashboard() {
 
   useEffect(() => {
     if (reports.length === 0) return;
-    const today = computeDefaultTradeDate();
-    const grouped = groupReportsByDate(reports);
-    const hasToday = grouped.some((year) =>
-      year.months.some((month) => month.days.some((day) => day.date === today)),
-    );
-    const seedDate = hasToday ? today : reportDateKey(reports[0]);
+    const seedDate = tradeDate || reportDateKey(reports[0]);
     const [yy, mm, dd] = seedDate.split("-");
     if (!yy || !mm || !dd) return;
     // Schedule outside the effect body to satisfy react-hooks/set-state-in-effect.
@@ -229,7 +245,7 @@ export function TwStockDashboard() {
       });
       setOpenDays((prev) => (prev[seedDate] ? prev : { ...prev, [seedDate]: true }));
     });
-  }, [reports]);
+  }, [reports, tradeDate]);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -394,7 +410,7 @@ export function TwStockDashboard() {
             </button>
           </div>
           <p className="text-xs text-zinc-500">
-            交易日期已自動帶入（21:30 前用前一交易日、之後用當日，遇週末順延至上一交易日），可自行調整；清空則由系統使用最近交易日。有持股時會額外產出部位決策報告。
+            交易日期已依證交所官方開休市日期表自動帶入（21:30 前用前一交易日、之後用當日；休市日順延至最近交易日），可自行調整；清空則由系統使用最近交易日。有持股時會額外產出部位決策報告。
           </p>
         </form>
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}

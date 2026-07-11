@@ -38,6 +38,12 @@ type CreateAgentJobInput = {
   avgCost?: number;
 };
 
+type LastTradingDateResponse = {
+  reference_date: string;
+  trade_date: string;
+  note: string | null;
+};
+
 export async function createAgentJob(
   input: CreateAgentJobInput | string,
   tradeDate?: string,
@@ -98,6 +104,29 @@ export async function getAgentJob(jobId: string): Promise<AgentJob> {
 
   const payload = (await response.json()) as AgentJobResponse;
   return payload.job;
+}
+
+export async function getLastTradingDate(): Promise<{
+  referenceDate: string;
+  tradeDate: string;
+  note: string | null;
+}> {
+  const response = await fetch(`${baseUrl()}/last-trading-date`, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Agent API error ${response.status}`);
+  }
+
+  const payload = (await response.json()) as LastTradingDateResponse;
+  return {
+    referenceDate: payload.reference_date,
+    tradeDate: payload.trade_date,
+    note: payload.note,
+  };
 }
 
 export async function createDailyDigest(input: {
