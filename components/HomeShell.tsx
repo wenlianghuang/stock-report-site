@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { TwStockDashboard } from "@/components/TwStockDashboard";
-import { UsStockPlaceholder } from "@/components/UsStockPlaceholder";
+import { UsStockDashboard } from "@/components/UsStockDashboard";
 
 type MarketTab = "tw" | "us";
 
@@ -69,7 +69,7 @@ export function HomeShell() {
       </header>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-8">
-        {market === "tw" ? <TwStockDashboard /> : <UsStockPlaceholder />}
+        {market === "tw" ? <TwStockDashboard /> : <UsStockDashboard />}
       </main>
     </div>
   );
