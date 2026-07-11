@@ -19,6 +19,20 @@ export const RSI_ZONE_LABEL: Record<string, string> = {
   unknown: "RSI 資料不足",
 };
 
+export const VOLATILITY_REGIME_LABEL: Record<string, string> = {
+  high: "波動偏高（ATR 擴大）",
+  low: "波動偏低（ATR 收斂）",
+  normal: "波動正常",
+  unknown: "ATR 資料不足",
+};
+
+export const TREND_STRENGTH_LABEL: Record<string, string> = {
+  strong: "趨勢明確（ADX 偏高）",
+  weak: "趨勢偏弱（ADX 偏低）",
+  neutral: "趨勢中性",
+  unknown: "ADX 資料不足",
+};
+
 export const CHIP_REGIME_LABEL: Record<string, string> = {
   accumulation: "籌碼偏多",
   distribution: "籌碼偏空",
@@ -86,6 +100,18 @@ export function toneForMa20Slope(value?: string): BadgeTone {
 export function toneForRsiZone(value?: string): BadgeTone {
   if (value === "oversold") return "bullish";
   if (value === "overbought") return "bearish";
+  return "neutral";
+}
+
+export function toneForVolatilityRegime(value?: string): BadgeTone {
+  if (value === "high") return "bearish";
+  if (value === "low") return "neutral";
+  return "neutral";
+}
+
+export function toneForTrendStrength(value?: string): BadgeTone {
+  if (value === "strong") return "bullish";
+  if (value === "weak") return "neutral";
   return "neutral";
 }
 
