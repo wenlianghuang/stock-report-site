@@ -1,9 +1,19 @@
+export type UsIndexIntradayPoint = {
+  timestamp: number;
+  time: string;
+  price: number;
+};
+
 export type UsIndexSnapshot = {
   symbol: string;
   name: string;
   price: number | null;
+  previousClose: number | null;
+  changeAmount: number | null;
   changePct: number | null;
   marketTime: string | null;
+  sessionOpen: boolean;
+  points: UsIndexIntradayPoint[];
 };
 
 const YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/";
@@ -22,14 +32,82 @@ type YahooChartMeta = {
   regularMarketTime?: number;
 };
 
+type YahooChartResult = {
+  meta?: YahooChartMeta;
+  timestamp?: number[];
+  indicators?: {
+    quote?: Array<{
+      close?: Array<number | null>;
+    }>;
+  };
+};
+
+function formatEtTime(timestamp: number): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(timestamp * 1000));
+}
+
+function isUsRegularSessionOpen(now = new Date()): boolean {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  }).formatToParts(now);
+
+  const get = (type: string) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  const weekday = get("weekday");
+  if (weekday === "Sat" || weekday === "Sun") {
+    return false;
+  }
+
+  const hour = Number(get("hour"));
+  const minute = Number(get("minute"));
+  const totalMinutes = hour * 60 + minute;
+  return totalMinutes >= 9 * 60 + 30 && totalMinutes < 16 * 60;
+}
+
+function buildIntradayPoints(result: YahooChartResult): UsIndexIntradayPoint[] {
+  const timestamps = result.timestamp ?? [];
+  const closes = result.indicators?.quote?.[0]?.close ?? [];
+  const points: UsIndexIntradayPoint[] = [];
+
+  for (let index = 0; index < timestamps.length; index += 1) {
+    const timestamp = timestamps[index];
+    const close = closes[index];
+    if (
+      typeof timestamp !== "number" ||
+      typeof close !== "number" ||
+      !Number.isFinite(close)
+    ) {
+      continue;
+    }
+    points.push({
+      timestamp,
+      time: formatEtTime(timestamp),
+      price: close,
+    });
+  }
+
+  return points;
+}
+
 async function fetchIndexSnapshot(
   symbol: string,
   name: string,
 ): Promise<UsIndexSnapshot> {
   const encoded = encodeURIComponent(symbol);
   const url = new URL(`${YAHOO_CHART_URL}${encoded}`);
-  url.searchParams.set("interval", "1d");
-  url.searchParams.set("range", "5d");
+  url.searchParams.set("interval", "5m");
+  url.searchParams.set("range", "1d");
+  url.searchParams.set("includePrePost", "false");
 
   const response = await fetch(url, {
     headers: { "User-Agent": USER_AGENT },
@@ -41,39 +119,64 @@ async function fetchIndexSnapshot(
   }
 
   const payload = (await response.json()) as {
-    chart?: { result?: Array<{ meta?: YahooChartMeta }> };
+    chart?: { result?: YahooChartResult[] };
   };
-  const meta = payload.chart?.result?.[0]?.meta;
+  const result = payload.chart?.result?.[0];
+  const meta = result?.meta;
   if (!meta) {
     return {
       symbol,
       name,
       price: null,
+      previousClose: null,
+      changeAmount: null,
       changePct: null,
       marketTime: null,
+      sessionOpen: isUsRegularSessionOpen(),
+      points: [],
     };
   }
 
+  const points = buildIntradayPoints(result);
+  const lastPoint = points.at(-1);
   const price =
-    typeof meta.regularMarketPrice === "number" ? meta.regularMarketPrice : null;
-  const previous =
+    typeof meta.regularMarketPrice === "number"
+      ? meta.regularMarketPrice
+      : lastPoint?.price ?? null;
+  const previousClose =
     typeof meta.chartPreviousClose === "number"
       ? meta.chartPreviousClose
       : typeof meta.previousClose === "number"
         ? meta.previousClose
         : null;
 
+  let changeAmount: number | null = null;
   let changePct: number | null = null;
-  if (price !== null && previous !== null && previous !== 0) {
-    changePct = ((price - previous) / previous) * 100;
+  if (price !== null && previousClose !== null) {
+    changeAmount = price - previousClose;
+    if (previousClose !== 0) {
+      changePct = (changeAmount / previousClose) * 100;
+    }
   }
 
   let marketTime: string | null = null;
   if (typeof meta.regularMarketTime === "number") {
     marketTime = new Date(meta.regularMarketTime * 1000).toISOString();
+  } else if (lastPoint) {
+    marketTime = new Date(lastPoint.timestamp * 1000).toISOString();
   }
 
-  return { symbol, name, price, changePct, marketTime };
+  return {
+    symbol,
+    name,
+    price,
+    previousClose,
+    changeAmount,
+    changePct,
+    marketTime,
+    sessionOpen: isUsRegularSessionOpen(),
+    points,
+  };
 }
 
 export async function fetchUsIndices(): Promise<UsIndexSnapshot[]> {

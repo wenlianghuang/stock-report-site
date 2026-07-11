@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { UsIndexIntradayChart } from "@/components/UsIndexIntradayChart";
 import type { UsIndexSnapshot } from "@/lib/us-indices";
 
 const POLL_INTERVAL_MS = 60_000;
@@ -13,10 +14,13 @@ function formatPrice(value: number | null): string {
   });
 }
 
-function formatChangePct(value: number | null): string {
-  if (value === null) return "—";
-  const sign = value >= 0 ? "+" : "";
-  return `${sign}${value.toFixed(2)}%`;
+function formatChange(index: UsIndexSnapshot): string {
+  if (index.changeAmount === null || index.changePct === null) {
+    return "—";
+  }
+  const amountSign = index.changeAmount >= 0 ? "+" : "";
+  const pctSign = index.changePct >= 0 ? "+" : "";
+  return `${amountSign}${index.changeAmount.toFixed(2)} (${pctSign}${index.changePct.toFixed(2)}%)`;
 }
 
 function formatMarketTime(iso: string | null): string | null {
@@ -42,6 +46,10 @@ function changeClass(changePct: number | null): string {
 
 function IndexCard({ index }: { index: UsIndexSnapshot }) {
   const marketTime = formatMarketTime(index.marketTime);
+  const isUp =
+    index.changeAmount !== null ? index.changeAmount >= 0 : index.changePct !== null
+      ? index.changePct >= 0
+      : true;
 
   return (
     <article className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
@@ -54,15 +62,29 @@ function IndexCard({ index }: { index: UsIndexSnapshot }) {
         </div>
         {marketTime ? (
           <p className="shrink-0 text-right text-xs text-zinc-400 dark:text-zinc-500">
-            ET {marketTime}
+            {index.sessionOpen ? "盤中" : "收盤"} · ET {marketTime}
           </p>
         ) : null}
       </div>
-      <p className="mt-4 text-3xl font-semibold tracking-tight">
+
+      <p className="mt-3 text-3xl font-semibold tracking-tight">
         {formatPrice(index.price)}
       </p>
       <p className={`mt-1 text-sm font-medium ${changeClass(index.changePct)}`}>
-        {formatChangePct(index.changePct)}
+        {formatChange(index)}
+      </p>
+
+      <div className="mt-4">
+        <UsIndexIntradayChart
+          symbol={index.symbol}
+          points={index.points}
+          previousClose={index.previousClose}
+          isUp={isUp}
+        />
+      </div>
+
+      <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">
+        盤中走勢 · 09:30–16:00 ET（不含盤前盤後）
       </p>
     </article>
   );
@@ -74,7 +96,8 @@ function IndexSkeleton() {
       <div className="h-4 w-16 rounded bg-zinc-200 dark:bg-zinc-800" />
       <div className="mt-2 h-5 w-28 rounded bg-zinc-200 dark:bg-zinc-800" />
       <div className="mt-4 h-9 w-32 rounded bg-zinc-200 dark:bg-zinc-800" />
-      <div className="mt-2 h-4 w-20 rounded bg-zinc-200 dark:bg-zinc-800" />
+      <div className="mt-2 h-4 w-36 rounded bg-zinc-200 dark:bg-zinc-800" />
+      <div className="mt-4 h-36 rounded-xl bg-zinc-100 dark:bg-zinc-900" />
     </div>
   );
 }
@@ -132,7 +155,7 @@ export function UsStockDashboard() {
           <div>
             <h2 className="text-lg font-semibold">美股指數</h2>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              資料來源 Yahoo Finance，盤中可能有約 15 分鐘延遲
+              資料來源 Yahoo Finance，顯示當日盤中走勢（09:30–16:00 ET）
             </p>
           </div>
           {!loading && error ? (
