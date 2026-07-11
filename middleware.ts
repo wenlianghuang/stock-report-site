@@ -37,19 +37,21 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims() verifies the JWT locally (cached JWKS) when the project uses
+  // asymmetric signing keys, avoiding a per-request round-trip to the Auth
+  // server. It transparently falls back to getUser() for legacy HS256 tokens.
+  const { data } = await supabase.auth.getClaims();
+  const hasUser = Boolean(data?.claims?.sub);
 
   if (isApi) {
     return supabaseResponse;
   }
 
-  if (!user && !isPublic && pathname !== "/") {
+  if (!hasUser && !isPublic && pathname !== "/") {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (user && isPublic) {
+  if (hasUser && isPublic) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
