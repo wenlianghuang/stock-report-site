@@ -2,6 +2,7 @@ export type UsIndexIntradayPoint = {
   timestamp: number;
   time: string;
   price: number;
+  volume: number | null;
 };
 
 export type UsIndexSnapshot = {
@@ -38,6 +39,7 @@ type YahooChartResult = {
   indicators?: {
     quote?: Array<{
       close?: Array<number | null>;
+      volume?: Array<number | null>;
     }>;
   };
 };
@@ -76,12 +78,15 @@ function isUsRegularSessionOpen(now = new Date()): boolean {
 
 function buildIntradayPoints(result: YahooChartResult): UsIndexIntradayPoint[] {
   const timestamps = result.timestamp ?? [];
-  const closes = result.indicators?.quote?.[0]?.close ?? [];
+  const quote = result.indicators?.quote?.[0];
+  const closes = quote?.close ?? [];
+  const volumes = quote?.volume ?? [];
   const points: UsIndexIntradayPoint[] = [];
 
   for (let index = 0; index < timestamps.length; index += 1) {
     const timestamp = timestamps[index];
     const close = closes[index];
+    const volume = volumes[index];
     if (
       typeof timestamp !== "number" ||
       typeof close !== "number" ||
@@ -93,6 +98,8 @@ function buildIntradayPoints(result: YahooChartResult): UsIndexIntradayPoint[] {
       timestamp,
       time: formatEtTime(timestamp),
       price: close,
+      volume:
+        typeof volume === "number" && Number.isFinite(volume) ? volume : null,
     });
   }
 
