@@ -1,7 +1,8 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { LoadingOverlay } from "@/components/LoadingOverlay";
 
 const IDLE_MS = 10 * 60 * 1000;
 const PUBLIC_PATHS = ["/login", "/signup"];
@@ -18,6 +19,7 @@ export function IdleLogout() {
   const pathname = usePathname();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loggingOutRef = useRef(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const isPublic = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
 
@@ -26,6 +28,7 @@ export function IdleLogout() {
       return;
     }
     loggingOutRef.current = true;
+    setLoggingOut(true);
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch {
@@ -71,6 +74,10 @@ export function IdleLogout() {
       }
     };
   }, [isPublic, resetTimer]);
+
+  if (loggingOut) {
+    return <LoadingOverlay label="閒置逾時，正在為您登出…" />;
+  }
 
   return null;
 }

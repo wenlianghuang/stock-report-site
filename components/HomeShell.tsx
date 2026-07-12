@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { TwStockDashboard } from "@/components/TwStockDashboard";
 import { UsStockDashboard } from "@/components/UsStockDashboard";
 
@@ -16,18 +18,29 @@ export function HomeShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const market: MarketTab = searchParams.get("market") === "us" ? "us" : "tw";
+  const [loggingOut, setLoggingOut] = useState(false);
 
   function selectMarket(next: MarketTab) {
     router.replace(next === "us" ? "/?market=us" : "/");
   }
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    if (loggingOut) {
+      return;
+    }
+    // Keep the overlay up until the browser unloads this page for /login.
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Still redirect so the user is not left on a protected page.
+    }
     window.location.href = "/login";
   }
 
   return (
     <div className="min-h-full bg-zinc-100 dark:bg-zinc-950">
+      {loggingOut ? <LoadingOverlay label="登出中，正在返回登入頁…" /> : null}
       <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white/90 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/90">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-6 py-4">
           <div className="flex items-center justify-between gap-4">
@@ -40,9 +53,10 @@ export function HomeShell() {
             <button
               type="button"
               onClick={() => void logout()}
-              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+              disabled={loggingOut}
+              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:hover:bg-zinc-900"
             >
-              登出
+              {loggingOut ? "登出中…" : "登出"}
             </button>
           </div>
 
