@@ -111,6 +111,7 @@ export function TwStockDashboard() {
   const [avgCost, setAvgCost] = useState("");
   const [holdingLoadedFor, setHoldingLoadedFor] = useState<string | null>(null);
   const [reports, setReports] = useState<ReportRecord[]>([]);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [sendingDate, setSendingDate] = useState<string | null>(null);
@@ -126,12 +127,16 @@ export function TwStockDashboard() {
   }
 
   async function loadReports() {
-    const response = await fetch("/api/reports");
-    if (!response.ok) {
-      return;
+    try {
+      const response = await fetch("/api/reports");
+      if (!response.ok) {
+        return;
+      }
+      const payload = (await response.json()) as { reports: ReportRecord[] };
+      setReports(payload.reports);
+    } finally {
+      setInitialLoading(false);
     }
-    const payload = (await response.json()) as { reports: ReportRecord[] };
-    setReports(payload.reports);
   }
 
   useEffect(() => {
@@ -419,7 +424,18 @@ export function TwStockDashboard() {
 
       <section>
         <h2 className="text-lg font-medium">我的報告</h2>
-        {reports.length === 0 ? (
+        {initialLoading ? (
+          <div className="mt-4 animate-pulse rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+            <ul className="flex flex-col gap-3">
+              {[0, 1, 2].map((row) => (
+                <li
+                  key={row}
+                  className="h-10 rounded-lg bg-zinc-100 dark:bg-zinc-900"
+                />
+              ))}
+            </ul>
+          </div>
+        ) : reports.length === 0 ? (
           <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
             尚無報告，請先輸入股號開始分析。
           </p>
