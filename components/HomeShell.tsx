@@ -4,9 +4,11 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { TwStockDashboard } from "@/components/TwStockDashboard";
+import { TwPortfolioDashboard } from "@/components/TwPortfolioDashboard";
 import { UsStockDashboard } from "@/components/UsStockDashboard";
 
 type MarketTab = "tw" | "us";
+type TwView = "chip" | "portfolio";
 
 function tabClass(active: boolean): string {
   return active
@@ -18,10 +20,16 @@ export function HomeShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const market: MarketTab = searchParams.get("market") === "us" ? "us" : "tw";
+  const twView: TwView =
+    searchParams.get("view") === "portfolio" ? "portfolio" : "chip";
   const [loggingOut, setLoggingOut] = useState(false);
 
   function selectMarket(next: MarketTab) {
     router.replace(next === "us" ? "/?market=us" : "/");
+  }
+
+  function selectTwView(next: TwView) {
+    router.replace(next === "portfolio" ? "/?view=portfolio" : "/");
   }
 
   async function logout() {
@@ -79,11 +87,39 @@ export function HomeShell() {
               美股
             </button>
           </nav>
+
+          {market === "tw" ? (
+            <nav
+              aria-label="台股功能分類"
+              className="inline-flex w-fit rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900"
+            >
+              <button
+                type="button"
+                onClick={() => selectTwView("chip")}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(twView === "chip")}`}
+              >
+                台股籌碼報告
+              </button>
+              <button
+                type="button"
+                onClick={() => selectTwView("portfolio")}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(twView === "portfolio")}`}
+              >
+                選股組合建議
+              </button>
+            </nav>
+          ) : null}
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-8">
-        {market === "tw" ? <TwStockDashboard /> : <UsStockDashboard />}
+        {market === "us" ? (
+          <UsStockDashboard />
+        ) : twView === "portfolio" ? (
+          <TwPortfolioDashboard />
+        ) : (
+          <TwStockDashboard />
+        )}
       </main>
     </div>
   );
