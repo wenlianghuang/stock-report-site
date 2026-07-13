@@ -1,4 +1,4 @@
-import type { AgentJob } from "./types";
+import type { AgentJob, PortfolioProfile, PortfolioResult } from "./types";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:8765";
 
@@ -159,6 +159,39 @@ export async function createDailyDigest(input: {
     subject: payload.digest.subject,
     mainDetailMarkdown: payload.digest.main_detail_markdown,
   };
+}
+
+export async function getPortfolio(input: {
+  profile: PortfolioProfile;
+  amount?: number;
+  date?: string;
+}): Promise<PortfolioResult> {
+  const params = new URLSearchParams({ profile: input.profile });
+  if (input.amount !== undefined) {
+    params.set("amount", String(input.amount));
+  }
+  if (input.date) {
+    params.set("date", input.date);
+  }
+
+  const response = await fetch(`${baseUrl()}/portfolio?${params.toString()}`, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      detail = data.detail ?? "";
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail || `Agent API error ${response.status}`);
+  }
+
+  const payload = (await response.json()) as { portfolio: PortfolioResult };
+  return payload.portfolio;
 }
 
 export async function checkAgentHealth(): Promise<boolean> {

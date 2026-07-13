@@ -181,6 +181,58 @@ export type ReportRow = {
   updated_at: string;
 };
 
+export type PortfolioProfile = "conservative" | "balanced" | "aggressive";
+
+export type PortfolioHolding = {
+  stock_id: string;
+  name: string;
+  asset_class: string;
+  category: string;
+  sector: string;
+  sector_label?: string;
+  role: "core" | "satellite";
+  weight_pct: number;
+  score: number;
+  close_price?: number | null;
+  allocation_twd?: number | null;
+  est_shares?: number | null;
+  rationale_tags: string[];
+  chip_summary?: string;
+};
+
+export type PortfolioExcluded = {
+  stock_id: string;
+  name: string;
+  reason: string;
+};
+
+export type PortfolioFacts = {
+  profile: PortfolioProfile;
+  profile_label: string;
+  risk_label: string;
+  trade_date?: string;
+  holdings: PortfolioHolding[];
+  num_holdings: number;
+  max_single_weight: number;
+  etf_weight_pct: number;
+  top_sector?: string;
+  top_sector_label?: string;
+  top_sector_weight_pct: number;
+  expected_volatility_level: string;
+  diversification_ok: boolean;
+  amount_twd?: number | null;
+  warnings: string[];
+  excluded: PortfolioExcluded[];
+  anchors: string[];
+};
+
+export type PortfolioResult = {
+  facts: PortfolioFacts;
+  narrative: string | null;
+  has_narrative: boolean;
+  generated_via: "agy" | "rules";
+};
+
 export type AgentJob = {
   id: string;
   stock_id: string;
