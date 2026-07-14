@@ -1,4 +1,9 @@
-import type { AgentJob, PortfolioProfile, PortfolioResult } from "./types";
+import type {
+  AgentJob,
+  PortfolioJob,
+  PortfolioProfile,
+  PortfolioResult,
+} from "./types";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:8765";
 
@@ -159,6 +164,73 @@ export async function createDailyDigest(input: {
     subject: payload.digest.subject,
     mainDetailMarkdown: payload.digest.main_detail_markdown,
   };
+}
+
+export async function createPortfolioJob(input: {
+  profile: PortfolioProfile;
+  amount: number;
+  date?: string;
+  force?: boolean;
+}): Promise<PortfolioJob> {
+  const body: {
+    profile: string;
+    amount: number;
+    skip_pdf: boolean;
+    trade_date?: string;
+    force?: boolean;
+  } = {
+    profile: input.profile,
+    amount: input.amount,
+    skip_pdf: true,
+  };
+  if (input.date) {
+    body.trade_date = input.date;
+  }
+  if (input.force) {
+    body.force = true;
+  }
+
+  const response = await fetch(`${baseUrl()}/portfolio/jobs`, {
+    method: "POST",
+    headers: agentHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      detail = data.detail ?? "";
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail || `Agent API error ${response.status}`);
+  }
+
+  const payload = (await response.json()) as { job: PortfolioJob };
+  return payload.job;
+}
+
+export async function getPortfolioJob(jobId: string): Promise<PortfolioJob> {
+  const response = await fetch(`${baseUrl()}/portfolio/jobs/${jobId}`, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      detail = data.detail ?? "";
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail || `Agent API error ${response.status}`);
+  }
+
+  const payload = (await response.json()) as { job: PortfolioJob };
+  return payload.job;
 }
 
 export async function getPortfolio(input: {

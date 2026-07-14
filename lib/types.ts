@@ -233,6 +233,28 @@ export type PortfolioResult = {
   generated_via: "agy" | "rules";
 };
 
+export type PortfolioJobStatus =
+  | "queued"
+  | "fetching"
+  | "gating"
+  | "positioning"
+  | "done"
+  | "failed";
+
+export type PortfolioJob = {
+  id: string;
+  profile: PortfolioProfile;
+  status: PortfolioJobStatus;
+  created_at: string;
+  updated_at: string;
+  amount?: number | null;
+  requested_trade_date?: string | null;
+  trade_date?: string | null;
+  error?: string | null;
+  portfolio?: PortfolioResult | null;
+  skip_pdf?: boolean;
+};
+
 export type AgentJob = {
   id: string;
   stock_id: string;

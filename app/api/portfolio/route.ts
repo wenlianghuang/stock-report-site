@@ -1,21 +1,30 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { checkAgentHealth, getPortfolio } from "@/lib/agent-client";
+import { checkAgentHealth, createPortfolioJob } from "@/lib/agent-client";
 import type { PortfolioProfile } from "@/lib/types";
 
 const PROFILES: PortfolioProfile[] = ["conservative", "balanced", "aggressive"];
+const MIN_AMOUNT = 50_000;
 
-export async function GET(request: Request) {
+export async function POST(request: Request) {
   const user = await requireUser();
   if (!user) {
     return NextResponse.json({ error: "未登入" }, { status: 401 });
   }
 
-  const { searchParams } = new URL(request.url);
-  const profile = (searchParams.get("profile") ?? "") as PortfolioProfile;
-  const amountRaw = searchParams.get("amount");
-  const date = searchParams.get("date")?.trim() ?? "";
+  let body: {
+    profile?: string;
+    amount?: number;
+    date?: string;
+    force?: boolean;
+  };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return NextResponse.json({ error: "請求格式錯誤" }, { status: 400 });
+  }
 
+  const profile = (body.profile ?? "") as PortfolioProfile;
   if (!PROFILES.includes(profile)) {
     return NextResponse.json(
       { error: "請選擇風險型態（保守 / 穩健 / 積極）" },
@@ -23,24 +32,21 @@ export async function GET(request: Request) {
     );
   }
 
-  const MIN_AMOUNT = 50_000;
-  let amount: number | undefined;
-  if (amountRaw) {
-    amount = Number(amountRaw);
-    if (
-      !Number.isFinite(amount) ||
-      !Number.isInteger(amount) ||
-      amount < MIN_AMOUNT
-    ) {
-      return NextResponse.json(
-        {
-          error: `投入金額須為整數，且不得低於 ${MIN_AMOUNT.toLocaleString("zh-TW")} 元`,
-        },
-        { status: 400 },
-      );
-    }
+  const amount = Number(body.amount);
+  if (
+    !Number.isFinite(amount) ||
+    !Number.isInteger(amount) ||
+    amount < MIN_AMOUNT
+  ) {
+    return NextResponse.json(
+      {
+        error: `投入金額須為整數，且不得低於 ${MIN_AMOUNT.toLocaleString("zh-TW")} 元`,
+      },
+      { status: 400 },
+    );
   }
 
+  const date = body.date?.trim() ?? "";
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json(
       { error: "交易日期格式須為 YYYY-MM-DD" },
@@ -60,12 +66,13 @@ export async function GET(request: Request) {
   }
 
   try {
-    const portfolio = await getPortfolio({
+    const job = await createPortfolioJob({
       profile,
-      amount: amount ? Math.round(amount) : undefined,
+      amount,
       date: date || undefined,
+      force: Boolean(body.force),
     });
-    return NextResponse.json({ portfolio });
+    return NextResponse.json({ job });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "無法產生投資組合建議";

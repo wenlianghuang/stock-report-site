@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { MarkdownReport } from "@/components/MarkdownReport";
 import type {
   PortfolioFacts,
+  PortfolioJob,
   PortfolioProfile,
   PortfolioResult,
 } from "@/lib/types";
@@ -207,7 +208,13 @@ function HoldingsTable({ facts }: { facts: PortfolioFacts }) {
   );
 }
 
-function PortfolioResultView({ result }: { result: PortfolioResult }) {
+function PortfolioResultView({
+  result,
+  narrativePending,
+}: {
+  result: PortfolioResult;
+  narrativePending?: boolean;
+}) {
   const { facts } = result;
   return (
     <div className="flex flex-col gap-5">
@@ -244,13 +251,14 @@ function PortfolioResultView({ result }: { result: PortfolioResult }) {
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
           <MarkdownReport markdown={result.narrative} />
         </div>
+      ) : narrativePending ? (
+        <div className="rounded-xl border border-dashed border-zinc-300 p-4 text-sm text-zinc-500 dark:border-zinc-700">
+          白話說明產生中，請稍候…（配置已可先參考）
+        </div>
       ) : (
         <div className="rounded-xl border border-dashed border-zinc-300 p-4 text-sm text-zinc-500 dark:border-zinc-700">
-          白話說明尚未產生。可於後端執行
-          <code className="mx-1 rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-800">
-            python main.py portfolio-gate {facts.profile}
-          </code>
-          產生 AI 說明後再回來查看；上方配置為系統規則即時計算，可直接參考。
+          白話說明尚未產生。請再按一次「產生投資組合建議」，系統會透過 API 自動呼叫
+          portfolio-gate 產生說明。
         </div>
       )}
 
@@ -287,7 +295,67 @@ export function TwPortfolioDashboard() {
   const [amount, setAmount] = useState("300000");
   const [result, setResult] = useState<PortfolioResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [narrativePending, setNarrativePending] = useState(false);
   const [error, setError] = useState("");
+  const [jobId, setJobId] = useState<string | null>(null);
+  const pollRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current !== null) {
+        window.clearTimeout(pollRef.current);
+      }
+    };
+  }, []);
+
+  function applyJob(job: PortfolioJob) {
+    if (job.portfolio) {
+      setResult(job.portfolio);
+    }
+    if (job.status === "done") {
+      setNarrativePending(false);
+      setLoading(false);
+      setJobId(null);
+      return;
+    }
+    if (job.status === "failed") {
+      setNarrativePending(false);
+      setLoading(false);
+      setJobId(null);
+      setError(job.error ?? "白話說明產生失敗");
+      return;
+    }
+    setNarrativePending(true);
+    setLoading(true);
+  }
+
+  async function pollJob(id: string) {
+    try {
+      const response = await fetch(`/api/portfolio/${id}`);
+      const payload = (await response.json()) as {
+        job?: PortfolioJob;
+        error?: string;
+      };
+      if (!response.ok || !payload.job) {
+        setError(payload.error ?? "無法取得組合任務狀態");
+        setLoading(false);
+        setNarrativePending(false);
+        setJobId(null);
+        return;
+      }
+      applyJob(payload.job);
+      if (payload.job.status !== "done" && payload.job.status !== "failed") {
+        pollRef.current = window.setTimeout(() => {
+          void pollJob(id);
+        }, 3000);
+      }
+    } catch {
+      setError("網路錯誤，請稍後再試");
+      setLoading(false);
+      setNarrativePending(false);
+      setJobId(null);
+    }
+  }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -304,28 +372,46 @@ export function TwPortfolioDashboard() {
       return;
     }
 
+    if (pollRef.current !== null) {
+      window.clearTimeout(pollRef.current);
+      pollRef.current = null;
+    }
+
     setLoading(true);
+    setNarrativePending(false);
+    setJobId(null);
     try {
-      const params = new URLSearchParams({
-        profile,
-        amount: String(amountNum),
+      const response = await fetch("/api/portfolio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile, amount: amountNum }),
       });
-      const response = await fetch(`/api/portfolio?${params.toString()}`);
       const payload = (await response.json()) as {
-        portfolio?: PortfolioResult;
+        job?: PortfolioJob;
         error?: string;
       };
-      if (!response.ok || !payload.portfolio) {
+      if (!response.ok || !payload.job) {
         setError(payload.error ?? "無法產生投資組合建議");
         setResult(null);
+        setLoading(false);
         return;
       }
-      setResult(payload.portfolio);
+
+      setJobId(payload.job.id);
+      applyJob(payload.job);
+      if (
+        payload.job.status !== "done" &&
+        payload.job.status !== "failed"
+      ) {
+        pollRef.current = window.setTimeout(() => {
+          void pollJob(payload.job!.id);
+        }, 3000);
+      }
     } catch {
       setError("網路錯誤，請稍後再試");
       setResult(null);
-    } finally {
       setLoading(false);
+      setNarrativePending(false);
     }
   }
 
@@ -380,11 +466,18 @@ export function TwPortfolioDashboard() {
               disabled={loading}
               className="rounded-lg bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
             >
-              {loading ? "產生中…" : "產生投資組合建議"}
+              {loading
+                ? narrativePending
+                  ? "白話說明產生中…"
+                  : "產生中…"
+                : "產生投資組合建議"}
             </button>
           </div>
         </form>
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+        {jobId && narrativePending ? (
+          <p className="mt-3 text-xs text-zinc-500">任務進行中，每 3 秒自動更新…</p>
+        ) : null}
       </section>
 
       {loading && !result ? (
@@ -398,7 +491,10 @@ export function TwPortfolioDashboard() {
         </div>
       ) : result ? (
         <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-          <PortfolioResultView result={result} />
+          <PortfolioResultView
+            result={result}
+            narrativePending={narrativePending}
+          />
         </section>
       ) : null}
     </div>
