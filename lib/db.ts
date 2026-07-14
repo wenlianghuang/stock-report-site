@@ -4,11 +4,14 @@ import type {
   HistoryDay,
   HoldingRecord,
   HoldingRow,
+  PortfolioFacts,
+  PortfolioRecord,
+  PortfolioRow,
   ReportRecord,
   ReportRow,
   ReportSummaryJson,
 } from "./types";
-import { rowToHolding, rowToReport } from "./types";
+import { rowToHolding, rowToPortfolio, rowToReport } from "./types";
 
 export async function createReport(input: {
   userId: string;
@@ -242,4 +245,158 @@ export function isValidShareCount(value: number): boolean {
 
 export function isValidAvgCost(value: number): boolean {
   return Number.isFinite(value) && value > 0;
+}
+
+export async function createPortfolio(input: {
+  userId: string;
+  agentJobId: string;
+  profile: PortfolioRecord["profile"];
+  amount: number;
+  tradeDate?: string;
+  status?: PortfolioRecord["status"];
+  narrative?: string | null;
+  factsJson?: PortfolioFacts | null;
+  generatedVia?: "agy" | "rules" | null;
+}): Promise<PortfolioRecord> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("portfolios")
+    .insert({
+      user_id: input.userId,
+      agent_job_id: input.agentJobId,
+      profile: input.profile,
+      amount: input.amount,
+      status: input.status ?? "queued",
+      ...(input.tradeDate ? { trade_date: input.tradeDate } : {}),
+      ...(input.narrative !== undefined ? { narrative: input.narrative } : {}),
+      ...(input.factsJson !== undefined ? { facts_json: input.factsJson } : {}),
+      ...(input.generatedVia !== undefined
+        ? { generated_via: input.generatedVia }
+        : {}),
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "無法建立組合紀錄");
+  }
+
+  return rowToPortfolio(data as PortfolioRow);
+}
+
+export async function updatePortfolio(
+  id: string,
+  patch: Partial<
+    Pick<
+      PortfolioRecord,
+      | "status"
+      | "tradeDate"
+      | "error"
+      | "narrative"
+      | "factsJson"
+      | "generatedVia"
+    >
+  >,
+): Promise<PortfolioRecord | undefined> {
+  const supabase = await createClient();
+  const payload: Record<
+    string,
+    string | number | null | undefined | PortfolioFacts
+  > = {};
+
+  if (patch.status !== undefined) {
+    payload.status = patch.status;
+  }
+  if (patch.tradeDate !== undefined) {
+    payload.trade_date = patch.tradeDate;
+  }
+  if (patch.error !== undefined) {
+    payload.error = patch.error;
+  }
+  if (patch.narrative !== undefined) {
+    payload.narrative = patch.narrative;
+  }
+  if (patch.factsJson !== undefined) {
+    payload.facts_json = patch.factsJson;
+  }
+  if (patch.generatedVia !== undefined) {
+    payload.generated_via = patch.generatedVia;
+  }
+
+  const { data, error } = await supabase
+    .from("portfolios")
+    .update(payload)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    return undefined;
+  }
+
+  return rowToPortfolio(data as PortfolioRow);
+}
+
+export async function findPortfolioById(
+  id: string,
+): Promise<PortfolioRecord | undefined> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("portfolios")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error || !data) {
+    return undefined;
+  }
+
+  return rowToPortfolio(data as PortfolioRow);
+}
+
+export async function deletePortfolio(
+  id: string,
+  userId: string,
+): Promise<boolean> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("portfolios")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId);
+
+  return !error;
+}
+
+export async function listPortfoliosForUser(
+  userId: string,
+): Promise<PortfolioRecord[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("portfolios")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error || !data) {
+    return [];
+  }
+
+  return (data as PortfolioRow[]).map(rowToPortfolio);
+}
+
+export function isValidPortfolioStatus(
+  value: string,
+): value is PortfolioRecord["status"] {
+  return ["queued", "gating", "done", "failed"].includes(value);
+}
+
+export function isValidPortfolioProfile(
+  value: string,
+): value is PortfolioRecord["profile"] {
+  return ["conservative", "balanced", "aggressive"].includes(value);
+}
+
+export function isValidPortfolioAmount(value: number): boolean {
+  return Number.isInteger(value) && value >= 50_000;
 }

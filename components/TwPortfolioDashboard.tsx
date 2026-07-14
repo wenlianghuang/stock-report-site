@@ -4,10 +4,11 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { MarkdownReport } from "@/components/MarkdownReport";
 import type {
   PortfolioFacts,
-  PortfolioJob,
   PortfolioProfile,
+  PortfolioRecord,
   PortfolioResult,
 } from "@/lib/types";
+import { portfolioRecordToResult } from "@/lib/types";
 
 type ProfileMeta = {
   id: PortfolioProfile;
@@ -257,8 +258,7 @@ function PortfolioResultView({
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-zinc-300 p-4 text-sm text-zinc-500 dark:border-zinc-700">
-          白話說明尚未產生。請再按一次「產生投資組合建議」，系統會透過 API 自動呼叫
-          portfolio-gate 產生說明。
+          白話說明尚未產生。
         </div>
       )}
 
@@ -290,17 +290,129 @@ function PortfolioResultView({
   );
 }
 
+type PortfolioGroup = {
+  year: string;
+  months: Array<{
+    month: string;
+    days: Array<{
+      day: string;
+      date: string;
+      items: PortfolioRecord[];
+    }>;
+  }>;
+};
+
+function portfolioDateKey(record: PortfolioRecord): string {
+  if (record.tradeDate) {
+    return record.tradeDate;
+  }
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(record.createdAt));
+  const get = (type: string) =>
+    parts.find((part) => part.type === type)?.value ?? "00";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function groupPortfoliosByDate(records: PortfolioRecord[]): PortfolioGroup[] {
+  const byDate = new Map<string, PortfolioRecord[]>();
+  for (const record of records) {
+    const key = portfolioDateKey(record);
+    const list = byDate.get(key);
+    if (list) {
+      list.push(record);
+    } else {
+      byDate.set(key, [record]);
+    }
+  }
+
+  const dates = Array.from(byDate.keys()).sort((a, b) => b.localeCompare(a));
+  const byYear = new Map<string, Map<string, Map<string, PortfolioRecord[]>>>();
+
+  for (const date of dates) {
+    const [year, month, day] = date.split("-");
+    if (!year || !month || !day) continue;
+    if (!byYear.has(year)) byYear.set(year, new Map());
+    const months = byYear.get(year)!;
+    if (!months.has(month)) months.set(month, new Map());
+    const days = months.get(month)!;
+    days.set(day, byDate.get(date)!);
+  }
+
+  return Array.from(byYear.entries())
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([year, months]) => ({
+      year,
+      months: Array.from(months.entries())
+        .sort(([a], [b]) => b.localeCompare(a))
+        .map(([month, days]) => ({
+          month,
+          days: Array.from(days.entries())
+            .sort(([a], [b]) => b.localeCompare(a))
+            .map(([day, items]) => ({
+              day,
+              date: `${year}-${month}-${day}`,
+              items,
+            })),
+        })),
+    }));
+}
+
+function profileLabel(profile: PortfolioProfile): string {
+  return PROFILES.find((item) => item.id === profile)?.label ?? profile;
+}
+
+function statusLabel(status: PortfolioRecord["status"]): string {
+  switch (status) {
+    case "done":
+      return "完成";
+    case "failed":
+      return "失敗";
+    case "gating":
+      return "產生中";
+    default:
+      return "排隊中";
+  }
+}
+
 export function TwPortfolioDashboard() {
   const [profile, setProfile] = useState<PortfolioProfile>("conservative");
   const [amount, setAmount] = useState("300000");
   const [result, setResult] = useState<PortfolioResult | null>(null);
+  const [records, setRecords] = useState<PortfolioRecord[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [narrativePending, setNarrativePending] = useState(false);
   const [error, setError] = useState("");
-  const [jobId, setJobId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [openYears, setOpenYears] = useState<Record<string, boolean>>({});
+  const [openMonths, setOpenMonths] = useState<Record<string, boolean>>({});
+  const [openDays, setOpenDays] = useState<Record<string, boolean>>({});
   const pollRef = useRef<number | null>(null);
 
+  const grouped = groupPortfoliosByDate(records);
+
+  async function loadRecords() {
+    try {
+      const response = await fetch("/api/portfolio");
+      if (!response.ok) {
+        return;
+      }
+      const payload = (await response.json()) as { portfolios: PortfolioRecord[] };
+      setRecords(payload.portfolios);
+    } finally {
+      setInitialLoading(false);
+    }
+  }
+
   useEffect(() => {
+    queueMicrotask(() => {
+      void loadRecords();
+    });
     return () => {
       if (pollRef.current !== null) {
         window.clearTimeout(pollRef.current);
@@ -308,52 +420,90 @@ export function TwPortfolioDashboard() {
     };
   }, []);
 
-  function applyJob(job: PortfolioJob) {
-    if (job.portfolio) {
-      setResult(job.portfolio);
-    }
-    if (job.status === "done") {
-      setNarrativePending(false);
-      setLoading(false);
-      setJobId(null);
+  useEffect(() => {
+    if (records.length === 0) {
       return;
     }
-    if (job.status === "failed") {
+    const latest = records[0];
+    const key = portfolioDateKey(latest);
+    const [year, month] = key.split("-");
+    if (!year || !month) {
+      return;
+    }
+    queueMicrotask(() => {
+      setOpenYears((prev) => ({ ...prev, [year]: true }));
+      setOpenMonths((prev) => ({ ...prev, [`${year}-${month}`]: true }));
+      setOpenDays((prev) => ({ ...prev, [key]: true }));
+    });
+  }, [records]);
+
+  function applyRecord(record: PortfolioRecord) {
+    setSelectedId(record.id);
+    const converted = portfolioRecordToResult(record);
+    if (converted) {
+      setResult(converted);
+    }
+    if (record.status === "done") {
       setNarrativePending(false);
       setLoading(false);
-      setJobId(null);
-      setError(job.error ?? "白話說明產生失敗");
+      return;
+    }
+    if (record.status === "failed") {
+      setNarrativePending(false);
+      setLoading(false);
+      setError(record.error ?? "白話說明產生失敗");
       return;
     }
     setNarrativePending(true);
     setLoading(true);
   }
 
-  async function pollJob(id: string) {
+  async function pollRecord(id: string) {
     try {
       const response = await fetch(`/api/portfolio/${id}`);
       const payload = (await response.json()) as {
-        job?: PortfolioJob;
+        portfolio?: PortfolioRecord;
         error?: string;
       };
-      if (!response.ok || !payload.job) {
+      if (!response.ok || !payload.portfolio) {
         setError(payload.error ?? "無法取得組合任務狀態");
         setLoading(false);
         setNarrativePending(false);
-        setJobId(null);
         return;
       }
-      applyJob(payload.job);
-      if (payload.job.status !== "done" && payload.job.status !== "failed") {
+      applyRecord(payload.portfolio);
+      setRecords((prev) => {
+        const others = prev.filter((item) => item.id !== payload.portfolio!.id);
+        return [payload.portfolio!, ...others];
+      });
+      if (
+        payload.portfolio.status !== "done" &&
+        payload.portfolio.status !== "failed"
+      ) {
         pollRef.current = window.setTimeout(() => {
-          void pollJob(id);
+          void pollRecord(id);
         }, 3000);
+      } else {
+        void loadRecords();
       }
     } catch {
       setError("網路錯誤，請稍後再試");
       setLoading(false);
       setNarrativePending(false);
-      setJobId(null);
+    }
+  }
+
+  function selectHistory(record: PortfolioRecord) {
+    if (pollRef.current !== null) {
+      window.clearTimeout(pollRef.current);
+      pollRef.current = null;
+    }
+    setError("");
+    applyRecord(record);
+    if (record.status !== "done" && record.status !== "failed") {
+      pollRef.current = window.setTimeout(() => {
+        void pollRecord(record.id);
+      }, 3000);
     }
   }
 
@@ -379,7 +529,7 @@ export function TwPortfolioDashboard() {
 
     setLoading(true);
     setNarrativePending(false);
-    setJobId(null);
+    setSelectedId(null);
     try {
       const response = await fetch("/api/portfolio", {
         method: "POST",
@@ -387,25 +537,28 @@ export function TwPortfolioDashboard() {
         body: JSON.stringify({ profile, amount: amountNum }),
       });
       const payload = (await response.json()) as {
-        job?: PortfolioJob;
+        portfolio?: PortfolioRecord;
         error?: string;
       };
-      if (!response.ok || !payload.job) {
+      if (!response.ok || !payload.portfolio) {
         setError(payload.error ?? "無法產生投資組合建議");
         setResult(null);
         setLoading(false);
         return;
       }
 
-      setJobId(payload.job.id);
-      applyJob(payload.job);
+      applyRecord(payload.portfolio);
+      setRecords((prev) => [payload.portfolio!, ...prev]);
       if (
-        payload.job.status !== "done" &&
-        payload.job.status !== "failed"
+        payload.portfolio.status !== "done" &&
+        payload.portfolio.status !== "failed"
       ) {
         pollRef.current = window.setTimeout(() => {
-          void pollJob(payload.job!.id);
+          void pollRecord(payload.portfolio!.id);
         }, 3000);
+      } else {
+        setLoading(false);
+        void loadRecords();
       }
     } catch {
       setError("網路錯誤，請稍後再試");
@@ -415,88 +568,279 @@ export function TwPortfolioDashboard() {
     }
   }
 
-  return (
-    <div className="flex w-full flex-col gap-8">
-      <div>
-        <h2 className="text-xl font-semibold">選股組合建議</h2>
-        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          輸入你的投入金額、選擇風險型態，系統會依當日籌碼即時算出一組以 ETF
-          為核心的新手投資組合，並附上白話說明。
-        </p>
-      </div>
+  async function onDelete(id: string) {
+    if (!window.confirm("確定刪除此組合建議紀錄？")) {
+      return;
+    }
+    setDeletingId(id);
+    try {
+      const response = await fetch(`/api/portfolio/${id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        setError(payload.error ?? "無法刪除紀錄");
+        return;
+      }
+      setRecords((prev) => prev.filter((item) => item.id !== id));
+      if (selectedId === id) {
+        setSelectedId(null);
+        setResult(null);
+        setNarrativePending(false);
+      }
+    } catch {
+      setError("網路錯誤，請稍後再試");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
-      <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <form onSubmit={onSubmit} className="flex flex-col gap-5">
-          <div>
-            <label className="mb-2 block text-sm font-medium">投入金額（新台幣）</label>
-            <input
-              type="number"
-              min={MIN_AMOUNT}
-              step={1}
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              placeholder="例如 300000"
-              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[16rem] dark:border-zinc-700 dark:bg-black"
-            />
-            <p className="mt-1 text-xs text-zinc-500">
-              最低 {MIN_AMOUNT.toLocaleString("zh-TW")} 元，可輸入任意整數金額
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {AMOUNT_PRESETS.map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  onClick={() => setAmount(String(preset))}
-                  className="rounded-full border border-zinc-300 px-3 py-1 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                >
-                  {preset.toLocaleString("zh-TW")}
-                </button>
+  return (
+    <div className="flex w-full flex-col gap-8 lg:flex-row lg:items-start">
+      <aside className="w-full shrink-0 lg:sticky lg:top-24 lg:w-72">
+        <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+          <h2 className="text-sm font-semibold">我的組合紀錄</h2>
+          <p className="mt-1 text-xs text-zinc-500">依資料日期資料夾瀏覽，可直接回看，不必重跑。</p>
+
+          {initialLoading ? (
+            <div className="mt-4 animate-pulse space-y-2">
+              {[0, 1, 2].map((row) => (
+                <div key={row} className="h-8 rounded bg-zinc-100 dark:bg-zinc-900" />
+              ))}
+            </div>
+          ) : records.length === 0 ? (
+            <p className="mt-4 text-sm text-zinc-500">尚無紀錄，請先產生一組建議。</p>
+          ) : (
+            <ul className="mt-4 space-y-2 text-sm">
+              {grouped.map((yearGroup) => {
+                const yearCount = yearGroup.months.reduce(
+                  (sum, month) =>
+                    sum + month.days.reduce((acc, day) => acc + day.items.length, 0),
+                  0,
+                );
+                const isYearOpen = openYears[yearGroup.year] ?? false;
+                return (
+                  <li key={yearGroup.year}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpenYears((prev) => ({
+                          ...prev,
+                          [yearGroup.year]: !(prev[yearGroup.year] ?? false),
+                        }))
+                      }
+                      className="flex w-full items-center justify-between gap-2 text-left"
+                    >
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <span className="text-zinc-500">{isYearOpen ? "▾" : "▸"}</span>
+                        {yearGroup.year}
+                      </span>
+                      <span className="text-xs text-zinc-500">{yearCount}</span>
+                    </button>
+                    {isYearOpen ? (
+                      <ul className="mt-1 space-y-1 pl-4">
+                        {yearGroup.months.map((monthGroup) => {
+                          const monthKey = `${yearGroup.year}-${monthGroup.month}`;
+                          const monthCount = monthGroup.days.reduce(
+                            (sum, day) => sum + day.items.length,
+                            0,
+                          );
+                          const isMonthOpen = openMonths[monthKey] ?? false;
+                          return (
+                            <li key={monthKey}>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setOpenMonths((prev) => ({
+                                    ...prev,
+                                    [monthKey]: !(prev[monthKey] ?? false),
+                                  }))
+                                }
+                                className="flex w-full items-center justify-between gap-2 text-left"
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  <span className="text-zinc-500">
+                                    {isMonthOpen ? "▾" : "▸"}
+                                  </span>
+                                  {monthGroup.month} 月
+                                </span>
+                                <span className="text-xs text-zinc-500">{monthCount}</span>
+                              </button>
+                              {isMonthOpen ? (
+                                <ul className="mt-1 space-y-1 pl-4">
+                                  {monthGroup.days.map((dayGroup) => {
+                                    const isDayOpen = openDays[dayGroup.date] ?? false;
+                                    return (
+                                      <li key={dayGroup.date}>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setOpenDays((prev) => ({
+                                              ...prev,
+                                              [dayGroup.date]: !(
+                                                prev[dayGroup.date] ?? false
+                                              ),
+                                            }))
+                                          }
+                                          className="flex w-full items-center justify-between gap-2 text-left"
+                                        >
+                                          <span className="flex items-center gap-1.5">
+                                            <span className="text-zinc-500">
+                                              {isDayOpen ? "▾" : "▸"}
+                                            </span>
+                                            {dayGroup.day} 日
+                                          </span>
+                                          <span className="text-xs text-zinc-500">
+                                            {dayGroup.items.length}
+                                          </span>
+                                        </button>
+                                        {isDayOpen ? (
+                                          <ul className="mt-1 space-y-1 pl-3">
+                                            {dayGroup.items.map((item) => {
+                                              const active = selectedId === item.id;
+                                              return (
+                                                <li key={item.id}>
+                                                  <div
+                                                    className={`flex items-start gap-1 rounded-lg border px-2 py-1.5 ${
+                                                      active
+                                                        ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+                                                        : "border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                                                    }`}
+                                                  >
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => selectHistory(item)}
+                                                      className="min-w-0 flex-1 text-left"
+                                                    >
+                                                      <p className="truncate text-xs font-medium">
+                                                        {profileLabel(item.profile)}
+                                                      </p>
+                                                      <p
+                                                        className={`truncate text-[11px] ${
+                                                          active
+                                                            ? "text-white/80 dark:text-zinc-900/70"
+                                                            : "text-zinc-500"
+                                                        }`}
+                                                      >
+                                                        {item.amount.toLocaleString("zh-TW")} 元 ·{" "}
+                                                        {statusLabel(item.status)}
+                                                      </p>
+                                                    </button>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => void onDelete(item.id)}
+                                                      disabled={deletingId === item.id}
+                                                      className={`shrink-0 text-[11px] ${
+                                                        active
+                                                          ? "text-white/80 hover:text-white dark:text-zinc-900/70"
+                                                          : "text-red-500 hover:text-red-600"
+                                                      }`}
+                                                    >
+                                                      {deletingId === item.id ? "…" : "刪"}
+                                                    </button>
+                                                  </div>
+                                                </li>
+                                              );
+                                            })}
+                                          </ul>
+                                        ) : null}
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col gap-8">
+        <div>
+          <h2 className="text-xl font-semibold">選股組合建議</h2>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            輸入投入金額、選擇風險型態後產生建議；完成的紀錄會依日期出現在左側，之後可直接回看。
+          </p>
+        </div>
+
+        <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+          <form onSubmit={onSubmit} className="flex flex-col gap-5">
+            <div>
+              <label className="mb-2 block text-sm font-medium">投入金額（新台幣）</label>
+              <input
+                type="number"
+                min={MIN_AMOUNT}
+                step={1}
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                placeholder="例如 300000"
+                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[16rem] dark:border-zinc-700 dark:bg-black"
+              />
+              <p className="mt-1 text-xs text-zinc-500">
+                最低 {MIN_AMOUNT.toLocaleString("zh-TW")} 元，可輸入任意整數金額
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {AMOUNT_PRESETS.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setAmount(String(preset))}
+                    className="rounded-full border border-zinc-300 px-3 py-1 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                  >
+                    {preset.toLocaleString("zh-TW")}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">風險型態</label>
+              <ProfileSelector value={profile} onChange={setProfile} disabled={loading} />
+            </div>
+
+            <div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="rounded-lg bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
+              >
+                {loading
+                  ? narrativePending
+                    ? "白話說明產生中…"
+                    : "產生中…"
+                  : "產生投資組合建議"}
+              </button>
+            </div>
+          </form>
+          {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+          {narrativePending ? (
+            <p className="mt-3 text-xs text-zinc-500">任務進行中，每 3 秒自動更新…</p>
+          ) : null}
+        </section>
+
+        {loading && !result ? (
+          <div className="animate-pulse rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="h-5 w-40 rounded bg-zinc-100 dark:bg-zinc-900" />
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              {[0, 1, 2, 3, 4, 5].map((cell) => (
+                <div key={cell} className="h-14 rounded-lg bg-zinc-100 dark:bg-zinc-900" />
               ))}
             </div>
           </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium">風險型態</label>
-            <ProfileSelector value={profile} onChange={setProfile} disabled={loading} />
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-lg bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
-            >
-              {loading
-                ? narrativePending
-                  ? "白話說明產生中…"
-                  : "產生中…"
-                : "產生投資組合建議"}
-            </button>
-          </div>
-        </form>
-        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-        {jobId && narrativePending ? (
-          <p className="mt-3 text-xs text-zinc-500">任務進行中，每 3 秒自動更新…</p>
+        ) : result ? (
+          <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+            <PortfolioResultView
+              result={result}
+              narrativePending={narrativePending}
+            />
+          </section>
         ) : null}
-      </section>
-
-      {loading && !result ? (
-        <div className="animate-pulse rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-          <div className="h-5 w-40 rounded bg-zinc-100 dark:bg-zinc-900" />
-          <div className="mt-4 grid grid-cols-3 gap-3">
-            {[0, 1, 2, 3, 4, 5].map((cell) => (
-              <div key={cell} className="h-14 rounded-lg bg-zinc-100 dark:bg-zinc-900" />
-            ))}
-          </div>
-        </div>
-      ) : result ? (
-        <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-          <PortfolioResultView
-            result={result}
-            narrativePending={narrativePending}
-          />
-        </section>
-      ) : null}
+      </div>
     </div>
   );
 }

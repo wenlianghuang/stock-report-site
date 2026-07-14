@@ -241,6 +241,38 @@ export type PortfolioJobStatus =
   | "done"
   | "failed";
 
+export type PortfolioRecord = {
+  id: string;
+  userId: string;
+  agentJobId: string;
+  status: PortfolioJobStatus;
+  profile: PortfolioProfile;
+  amount: number;
+  tradeDate?: string;
+  error?: string;
+  narrative?: string;
+  factsJson?: PortfolioFacts;
+  generatedVia?: "agy" | "rules";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PortfolioRow = {
+  id: string;
+  user_id: string;
+  agent_job_id: string;
+  status: PortfolioJobStatus;
+  profile: PortfolioProfile;
+  amount: number;
+  trade_date: string | null;
+  error: string | null;
+  narrative: string | null;
+  facts_json: PortfolioFacts | null;
+  generated_via: "agy" | "rules" | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PortfolioJob = {
   id: string;
   profile: PortfolioProfile;
@@ -329,5 +361,37 @@ export function rowToHolding(row: HoldingRow): HoldingRecord {
     avgCost: Number(row.avg_cost),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+export function rowToPortfolio(row: PortfolioRow): PortfolioRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    agentJobId: row.agent_job_id,
+    status: row.status,
+    profile: row.profile,
+    amount: row.amount,
+    tradeDate: row.trade_date ?? undefined,
+    error: row.error ?? undefined,
+    narrative: row.narrative ?? undefined,
+    factsJson: row.facts_json ?? undefined,
+    generatedVia: row.generated_via ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function portfolioRecordToResult(
+  record: PortfolioRecord,
+): PortfolioResult | null {
+  if (!record.factsJson) {
+    return null;
+  }
+  return {
+    facts: record.factsJson,
+    narrative: record.narrative ?? null,
+    has_narrative: Boolean(record.narrative),
+    generated_via: record.generatedVia ?? "rules",
   };
 }

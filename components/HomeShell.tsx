@@ -112,7 +112,11 @@ export function HomeShell() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl px-6 py-8">
+      <main
+        className={`mx-auto w-full px-6 py-8 ${
+          market === "tw" && twView === "portfolio" ? "max-w-6xl" : "max-w-5xl"
+        }`}
+      >
         {market === "us" ? (
           <UsStockDashboard />
         ) : twView === "portfolio" ? (
