@@ -4,9 +4,11 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { MarkdownReport } from "@/components/MarkdownReport";
 import type {
   PortfolioFacts,
+  PortfolioMode,
   PortfolioProfile,
   PortfolioRecord,
   PortfolioResult,
+  PortfolioThemeMeta,
 } from "@/lib/types";
 import { portfolioRecordToResult } from "@/lib/types";
 
@@ -38,8 +40,30 @@ const PROFILES: ProfileMeta[] = [
   },
 ];
 
+const FALLBACK_THEMES: PortfolioThemeMeta[] = [
+  {
+    id: "financials",
+    label: "金融",
+    style: "defensive",
+    risk_hint: "相對防禦、偏息收；仍受利率與信用循環影響",
+  },
+  {
+    id: "thermal",
+    label: "散熱",
+    style: "cyclical",
+    risk_hint: "題材／景氣循環色彩較濃，波動通常高於金融",
+  },
+  {
+    id: "ai",
+    label: "AI",
+    style: "growth",
+    risk_hint: "成長／題材導向，估值與景氣敏感度高",
+  },
+];
+
 const AMOUNT_PRESETS = [100_000, 300_000, 500_000, 1_000_000];
 const MIN_AMOUNT = 50_000;
+const MAX_THEMES = 3;
 
 const VOLATILITY_LABEL: Record<string, string> = {
   low: "低",
@@ -48,9 +72,76 @@ const VOLATILITY_LABEL: Record<string, string> = {
   high: "高",
 };
 
+const STYLE_LABEL: Record<string, string> = {
+  defensive: "防禦",
+  cyclical: "題材循環",
+  growth: "成長",
+};
+
 function formatTwd(value?: number | null): string {
   if (value === undefined || value === null) return "—";
   return `${Math.round(value).toLocaleString("zh-TW")} 元`;
+}
+
+function holdingRoleLabel(role: string): string {
+  if (role === "core") return "核心 ETF";
+  if (role === "theme") return "主題持股";
+  return "衛星個股";
+}
+
+function ModeSelector({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: PortfolioMode;
+  onChange: (next: PortfolioMode) => void;
+  disabled: boolean;
+}) {
+  const options: Array<{ id: PortfolioMode; title: string; desc: string }> = [
+    {
+      id: "beginner",
+      title: "新手風險組合",
+      desc: "以 ETF 核心＋權值股衛星，依保守／穩健／積極配置。",
+    },
+    {
+      id: "theme",
+      title: "主題袖口組合",
+      desc: "選金融、散熱、AI 等主題，用籌碼挑該族群合適標的。",
+    },
+  ];
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {options.map((option) => {
+        const active = option.id === value;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => onChange(option.id)}
+            disabled={disabled}
+            className={`rounded-xl border p-4 text-left transition disabled:opacity-60 ${
+              active
+                ? "border-zinc-900 bg-zinc-900 text-white shadow-sm dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+                : "border-zinc-200 bg-white hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"
+            }`}
+          >
+            <p className="text-base font-semibold">{option.title}</p>
+            <p
+              className={`mt-1 text-xs leading-relaxed ${
+                active
+                  ? "text-white/80 dark:text-zinc-900/80"
+                  : "text-zinc-500 dark:text-zinc-400"
+              }`}
+            >
+              {option.desc}
+            </p>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function ProfileSelector({
@@ -106,11 +197,97 @@ function ProfileSelector({
   );
 }
 
+function ThemeSelector({
+  themes,
+  selected,
+  onChange,
+  disabled,
+}: {
+  themes: PortfolioThemeMeta[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+  disabled: boolean;
+}) {
+  function toggle(id: string) {
+    if (selected.includes(id)) {
+      onChange(selected.filter((item) => item !== id));
+      return;
+    }
+    if (selected.length >= MAX_THEMES) {
+      return;
+    }
+    onChange([...selected, id]);
+  }
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      {themes.map((theme) => {
+        const active = selected.includes(theme.id);
+        const styleText = STYLE_LABEL[theme.style] ?? theme.style;
+        return (
+          <button
+            key={theme.id}
+            type="button"
+            onClick={() => toggle(theme.id)}
+            disabled={disabled || (!active && selected.length >= MAX_THEMES)}
+            className={`flex flex-col gap-1 rounded-xl border p-4 text-left transition disabled:opacity-60 ${
+              active
+                ? "border-zinc-900 bg-zinc-900 text-white shadow-sm dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+                : "border-zinc-200 bg-white hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-base font-semibold">{theme.label}</span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs ${
+                  active
+                    ? "bg-white/20 text-white dark:bg-zinc-900/10 dark:text-zinc-900"
+                    : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+                }`}
+              >
+                {styleText}
+              </span>
+            </div>
+            <p
+              className={`text-xs leading-relaxed ${
+                active
+                  ? "text-white/80 dark:text-zinc-900/80"
+                  : "text-zinc-500 dark:text-zinc-400"
+              }`}
+            >
+              {theme.risk_hint}
+            </p>
+            <p
+              className={`mt-1 text-[11px] font-medium ${
+                active
+                  ? "text-white/70 dark:text-zinc-900/70"
+                  : "text-zinc-400"
+              }`}
+            >
+              {active ? "已選擇" : "點擊加入"}
+            </p>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function SummaryCard({ facts }: { facts: PortfolioFacts }) {
+  const isTheme = facts.mode === "theme";
   const stats: Array<{ label: string; value: string }> = [
-    { label: "風險屬性", value: `${facts.profile_label}（${facts.risk_label}）` },
-    { label: "持股檔數", value: `${facts.num_holdings} 檔` },
-    { label: "ETF 核心", value: `${facts.etf_weight_pct}%` },
+    {
+      label: isTheme ? "組合類型" : "風險屬性",
+      value: `${facts.profile_label}（${facts.risk_label}）`,
+    },
+    {
+      label: "持股檔數",
+      value: `${facts.num_holdings} 檔`,
+    },
+    {
+      label: isTheme ? "ETF 佔比" : "ETF 核心",
+      value: `${facts.etf_weight_pct}%`,
+    },
     {
       label: "預期波動",
       value: VOLATILITY_LABEL[facts.expected_volatility_level] ?? "中",
@@ -120,10 +297,21 @@ function SummaryCard({ facts }: { facts: PortfolioFacts }) {
       value: `${facts.top_sector_label ?? facts.top_sector ?? "—"} ${facts.top_sector_weight_pct}%`,
     },
     {
-      label: "分散程度",
-      value: facts.diversification_ok ? "良好" : "偏集中",
+      label: isTheme ? "配置定位" : "分散程度",
+      value: isTheme
+        ? "主題袖口（集中）"
+        : facts.diversification_ok
+          ? "良好"
+          : "偏集中",
     },
   ];
+
+  if (isTheme && facts.theme_labels && facts.theme_labels.length > 0) {
+    stats.splice(1, 0, {
+      label: "主題",
+      value: facts.theme_labels.join("、"),
+    });
+  }
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -171,10 +359,12 @@ function HoldingsTable({ facts }: { facts: PortfolioFacts }) {
                   className={`rounded-full px-2 py-0.5 text-xs ${
                     holding.role === "core"
                       ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                      : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                      : holding.role === "theme"
+                        ? "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300"
+                        : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
                   }`}
                 >
-                  {holding.role === "core" ? "核心 ETF" : "衛星個股"}
+                  {holdingRoleLabel(holding.role)}
                 </span>
               </td>
               <td className="px-3 py-2 text-zinc-600 dark:text-zinc-300">
@@ -217,11 +407,14 @@ function PortfolioResultView({
   narrativePending?: boolean;
 }) {
   const { facts } = result;
+  const isTheme = facts.mode === "theme";
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-lg font-medium">
-          {facts.profile_label}投資組合建議
+          {isTheme
+            ? `${facts.profile_label}組合建議`
+            : `${facts.profile_label}投資組合建議`}
         </h2>
         {facts.trade_date ? (
           <span className="text-xs text-zinc-500">資料日期 {facts.trade_date}</span>
@@ -361,8 +554,20 @@ function groupPortfoliosByDate(records: PortfolioRecord[]): PortfolioGroup[] {
     }));
 }
 
-function profileLabel(profile: PortfolioProfile): string {
-  return PROFILES.find((item) => item.id === profile)?.label ?? profile;
+function recordTitle(
+  record: PortfolioRecord,
+  themeCatalog: PortfolioThemeMeta[],
+): string {
+  if (record.mode === "theme") {
+    const labels = record.themes.map(
+      (id) => themeCatalog.find((theme) => theme.id === id)?.label ?? id,
+    );
+    if (labels.length > 0) {
+      return labels.join("＋") + "主題";
+    }
+    return record.factsJson?.profile_label ?? "主題組合";
+  }
+  return PROFILES.find((item) => item.id === record.profile)?.label ?? record.profile;
 }
 
 function statusLabel(status: PortfolioRecord["status"]): string {
@@ -379,7 +584,11 @@ function statusLabel(status: PortfolioRecord["status"]): string {
 }
 
 export function TwPortfolioDashboard() {
+  const [mode, setMode] = useState<PortfolioMode>("beginner");
   const [profile, setProfile] = useState<PortfolioProfile>("conservative");
+  const [selectedThemes, setSelectedThemes] = useState<string[]>(["financials"]);
+  const [themeCatalog, setThemeCatalog] =
+    useState<PortfolioThemeMeta[]>(FALLBACK_THEMES);
   const [amount, setAmount] = useState("300000");
   const [result, setResult] = useState<PortfolioResult | null>(null);
   const [records, setRecords] = useState<PortfolioRecord[]>([]);
@@ -409,9 +618,27 @@ export function TwPortfolioDashboard() {
     }
   }
 
+  async function loadThemes() {
+    try {
+      const response = await fetch("/api/portfolio/themes");
+      if (!response.ok) {
+        return;
+      }
+      const payload = (await response.json()) as {
+        themes?: PortfolioThemeMeta[];
+      };
+      if (payload.themes && payload.themes.length > 0) {
+        setThemeCatalog(payload.themes);
+      }
+    } catch {
+      // keep fallback
+    }
+  }
+
   useEffect(() => {
     queueMicrotask(() => {
       void loadRecords();
+      void loadThemes();
     });
     return () => {
       if (pollRef.current !== null) {
@@ -522,6 +749,11 @@ export function TwPortfolioDashboard() {
       return;
     }
 
+    if (mode === "theme" && selectedThemes.length === 0) {
+      setError("請至少選擇一個主題（金融／散熱／AI）");
+      return;
+    }
+
     if (pollRef.current !== null) {
       window.clearTimeout(pollRef.current);
       pollRef.current = null;
@@ -534,7 +766,11 @@ export function TwPortfolioDashboard() {
       const response = await fetch("/api/portfolio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile, amount: amountNum }),
+        body: JSON.stringify(
+          mode === "theme"
+            ? { mode, themes: selectedThemes, amount: amountNum }
+            : { mode, profile, amount: amountNum },
+        ),
       });
       const payload = (await response.json()) as {
         portfolio?: PortfolioRecord;
@@ -598,7 +834,9 @@ export function TwPortfolioDashboard() {
       <aside className="w-full shrink-0 lg:sticky lg:top-24 lg:w-72">
         <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
           <h2 className="text-sm font-semibold">我的組合紀錄</h2>
-          <p className="mt-1 text-xs text-zinc-500">依資料日期資料夾瀏覽，可直接回看，不必重跑。</p>
+          <p className="mt-1 text-xs text-zinc-500">
+            依資料日期瀏覽；主題組合會標成「主題」。
+          </p>
 
           {initialLoading ? (
             <div className="mt-4 animate-pulse space-y-2">
@@ -711,7 +949,18 @@ export function TwPortfolioDashboard() {
                                                       className="min-w-0 flex-1 text-left"
                                                     >
                                                       <p className="truncate text-xs font-medium">
-                                                        {profileLabel(item.profile)}
+                                                        {recordTitle(item, themeCatalog)}
+                                                        {item.mode === "theme" ? (
+                                                          <span
+                                                            className={`ml-1 rounded px-1 text-[10px] ${
+                                                              active
+                                                                ? "bg-white/20 dark:bg-zinc-900/10"
+                                                                : "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300"
+                                                            }`}
+                                                          >
+                                                            主題
+                                                          </span>
+                                                        ) : null}
                                                       </p>
                                                       <p
                                                         className={`truncate text-[11px] ${
@@ -764,12 +1013,17 @@ export function TwPortfolioDashboard() {
         <div>
           <h2 className="text-xl font-semibold">選股組合建議</h2>
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            輸入投入金額、選擇風險型態後產生建議；完成的紀錄會依日期出現在左側，之後可直接回看。
+            先選模式：新手全倉風險組合，或老手用的主題袖口（可單選／多選融合）。
           </p>
         </div>
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
           <form onSubmit={onSubmit} className="flex flex-col gap-5">
+            <div>
+              <label className="mb-2 block text-sm font-medium">組合模式</label>
+              <ModeSelector value={mode} onChange={setMode} disabled={loading} />
+            </div>
+
             <div>
               <label className="mb-2 block text-sm font-medium">投入金額（新台幣）</label>
               <input
@@ -782,7 +1036,10 @@ export function TwPortfolioDashboard() {
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[16rem] dark:border-zinc-700 dark:bg-black"
               />
               <p className="mt-1 text-xs text-zinc-500">
-                最低 {MIN_AMOUNT.toLocaleString("zh-TW")} 元，可輸入任意整數金額
+                最低 {MIN_AMOUNT.toLocaleString("zh-TW")} 元
+                {mode === "theme"
+                  ? "；主題模式建議把這筆錢當袖口，而非全部倉位。"
+                  : "，可輸入任意整數金額。"}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {AMOUNT_PRESETS.map((preset) => (
@@ -798,22 +1055,55 @@ export function TwPortfolioDashboard() {
               </div>
             </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium">風險型態</label>
-              <ProfileSelector value={profile} onChange={setProfile} disabled={loading} />
-            </div>
+            {mode === "beginner" ? (
+              <div>
+                <label className="mb-2 block text-sm font-medium">風險型態</label>
+                <ProfileSelector
+                  value={profile}
+                  onChange={setProfile}
+                  disabled={loading}
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="mb-2 block text-sm font-medium">
+                  主題（可多選，最多 {MAX_THEMES} 個）
+                </label>
+                <ThemeSelector
+                  themes={themeCatalog}
+                  selected={selectedThemes}
+                  onChange={setSelectedThemes}
+                  disabled={loading}
+                />
+                <p className="mt-2 text-xs text-zinc-500">
+                  已選：
+                  {selectedThemes.length === 0
+                    ? "尚未選擇"
+                    : selectedThemes
+                        .map(
+                          (id) =>
+                            themeCatalog.find((theme) => theme.id === id)?.label ??
+                            id,
+                        )
+                        .join("、")}
+                  。多選會做成融合袖口（例如金融＋散熱）。
+                </p>
+              </div>
+            )}
 
             <div>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || (mode === "theme" && selectedThemes.length === 0)}
                 className="rounded-lg bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
               >
                 {loading
                   ? narrativePending
                     ? "白話說明產生中…"
                     : "產生中…"
-                  : "產生投資組合建議"}
+                  : mode === "theme"
+                    ? "產生主題組合建議"
+                    : "產生投資組合建議"}
               </button>
             </div>
           </form>

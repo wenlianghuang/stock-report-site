@@ -167,22 +167,32 @@ export async function createDailyDigest(input: {
 }
 
 export async function createPortfolioJob(input: {
-  profile: PortfolioProfile;
+  mode?: "beginner" | "theme";
+  profile?: PortfolioProfile | string;
+  themes?: string[];
   amount: number;
   date?: string;
   force?: boolean;
 }): Promise<PortfolioJob> {
+  const mode = input.mode ?? "beginner";
   const body: {
-    profile: string;
+    mode: string;
     amount: number;
     skip_pdf: boolean;
+    profile?: string;
+    themes?: string[];
     trade_date?: string;
     force?: boolean;
   } = {
-    profile: input.profile,
+    mode,
     amount: input.amount,
     skip_pdf: true,
   };
+  if (mode === "theme") {
+    body.themes = input.themes ?? [];
+  } else {
+    body.profile = String(input.profile ?? "");
+  }
   if (input.date) {
     body.trade_date = input.date;
   }
@@ -234,11 +244,19 @@ export async function getPortfolioJob(jobId: string): Promise<PortfolioJob> {
 }
 
 export async function getPortfolio(input: {
-  profile: PortfolioProfile;
+  mode?: "beginner" | "theme";
+  profile?: PortfolioProfile | string;
+  themes?: string[];
   amount?: number;
   date?: string;
 }): Promise<PortfolioResult> {
-  const params = new URLSearchParams({ profile: input.profile });
+  const mode = input.mode ?? "beginner";
+  const params = new URLSearchParams({ mode });
+  if (mode === "theme") {
+    params.set("themes", (input.themes ?? []).join(","));
+  } else if (input.profile) {
+    params.set("profile", String(input.profile));
+  }
   if (input.amount !== undefined) {
     params.set("amount", String(input.amount));
   }
@@ -264,6 +282,27 @@ export async function getPortfolio(input: {
 
   const payload = (await response.json()) as { portfolio: PortfolioResult };
   return payload.portfolio;
+}
+
+export async function listPortfolioThemes(): Promise<
+  Array<{ id: string; label: string; style: string; risk_hint: string }>
+> {
+  const response = await fetch(`${baseUrl()}/portfolio/themes`, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    return [];
+  }
+  const payload = (await response.json()) as {
+    themes?: Array<{
+      id: string;
+      label: string;
+      style: string;
+      risk_hint: string;
+    }>;
+  };
+  return payload.themes ?? [];
 }
 
 export async function checkAgentHealth(): Promise<boolean> {

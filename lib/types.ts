@@ -183,6 +183,17 @@ export type ReportRow = {
 
 export type PortfolioProfile = "conservative" | "balanced" | "aggressive";
 
+export type PortfolioMode = "beginner" | "theme";
+
+export type PortfolioThemeId = "financials" | "thermal" | "ai" | string;
+
+export type PortfolioThemeMeta = {
+  id: string;
+  label: string;
+  style: string;
+  risk_hint: string;
+};
+
 export type PortfolioHolding = {
   stock_id: string;
   name: string;
@@ -190,7 +201,7 @@ export type PortfolioHolding = {
   category: string;
   sector: string;
   sector_label?: string;
-  role: "core" | "satellite";
+  role: "core" | "satellite" | "theme";
   weight_pct: number;
   score: number;
   close_price?: number | null;
@@ -198,6 +209,7 @@ export type PortfolioHolding = {
   est_shares?: number | null;
   rationale_tags: string[];
   chip_summary?: string;
+  themes?: string[];
 };
 
 export type PortfolioExcluded = {
@@ -207,7 +219,7 @@ export type PortfolioExcluded = {
 };
 
 export type PortfolioFacts = {
-  profile: PortfolioProfile;
+  profile: string;
   profile_label: string;
   risk_label: string;
   trade_date?: string;
@@ -224,6 +236,9 @@ export type PortfolioFacts = {
   warnings: string[];
   excluded: PortfolioExcluded[];
   anchors: string[];
+  mode?: PortfolioMode;
+  themes?: string[];
+  theme_labels?: string[];
 };
 
 export type PortfolioResult = {
@@ -231,6 +246,7 @@ export type PortfolioResult = {
   narrative: string | null;
   has_narrative: boolean;
   generated_via: "agy" | "rules";
+  artifact_key?: string;
 };
 
 export type PortfolioJobStatus =
@@ -246,7 +262,9 @@ export type PortfolioRecord = {
   userId: string;
   agentJobId: string;
   status: PortfolioJobStatus;
-  profile: PortfolioProfile;
+  mode: PortfolioMode;
+  profile: string;
+  themes: string[];
   amount: number;
   tradeDate?: string;
   error?: string;
@@ -262,7 +280,9 @@ export type PortfolioRow = {
   user_id: string;
   agent_job_id: string;
   status: PortfolioJobStatus;
-  profile: PortfolioProfile;
+  mode: PortfolioMode | null;
+  profile: string;
+  themes: string[] | null;
   amount: number;
   trade_date: string | null;
   error: string | null;
@@ -275,7 +295,7 @@ export type PortfolioRow = {
 
 export type PortfolioJob = {
   id: string;
-  profile: PortfolioProfile;
+  profile: string;
   status: PortfolioJobStatus;
   created_at: string;
   updated_at: string;
@@ -285,6 +305,8 @@ export type PortfolioJob = {
   error?: string | null;
   portfolio?: PortfolioResult | null;
   skip_pdf?: boolean;
+  mode?: PortfolioMode;
+  themes?: string[];
 };
 
 export type AgentJob = {
@@ -365,12 +387,17 @@ export function rowToHolding(row: HoldingRow): HoldingRecord {
 }
 
 export function rowToPortfolio(row: PortfolioRow): PortfolioRecord {
+  const themes = Array.isArray(row.themes)
+    ? row.themes.map((item) => String(item))
+    : [];
   return {
     id: row.id,
     userId: row.user_id,
     agentJobId: row.agent_job_id,
     status: row.status,
+    mode: row.mode === "theme" ? "theme" : "beginner",
     profile: row.profile,
+    themes,
     amount: row.amount,
     tradeDate: row.trade_date ?? undefined,
     error: row.error ?? undefined,

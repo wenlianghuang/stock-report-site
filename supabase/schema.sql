@@ -126,8 +126,14 @@ create table if not exists public.portfolios (
   agent_job_id text not null,
   status text not null default 'queued'
     check (status in ('queued', 'gating', 'done', 'failed')),
+  mode text not null default 'beginner'
+    check (mode in ('beginner', 'theme')),
   profile text not null
-    check (profile in ('conservative', 'balanced', 'aggressive')),
+    check (
+      profile in ('conservative', 'balanced', 'aggressive')
+      or profile ~ '^theme_[a-z0-9_]+$'
+    ),
+  themes jsonb not null default '[]'::jsonb,
   amount integer not null
     check (amount >= 50000),
   trade_date text,

@@ -4,10 +4,16 @@ import { checkAgentHealth, createPortfolioJob } from "@/lib/agent-client";
 import {
   createPortfolio,
   isValidPortfolioAmount,
+  isValidPortfolioMode,
   isValidPortfolioProfile,
+  isValidPortfolioThemes,
   isValidTradeDate,
   listPortfoliosForUser,
 } from "@/lib/db";
+
+function themeSlug(themes: string[]): string {
+  return `theme_${[...themes].sort().join("_")}`;
+}
 
 export async function GET() {
   const user = await requireUser();
@@ -26,7 +32,9 @@ export async function POST(request: Request) {
   }
 
   let body: {
+    mode?: string;
     profile?: string;
+    themes?: string[];
     amount?: number;
     date?: string;
     force?: boolean;
@@ -37,12 +45,35 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "請求格式錯誤" }, { status: 400 });
   }
 
-  const profile = body.profile ?? "";
-  if (!isValidPortfolioProfile(profile)) {
+  const mode = body.mode ?? "beginner";
+  if (!isValidPortfolioMode(mode)) {
     return NextResponse.json(
-      { error: "請選擇風險型態（保守 / 穩健 / 積極）" },
+      { error: "mode 須為 beginner 或 theme" },
       { status: 400 },
     );
+  }
+
+  const themes = Array.isArray(body.themes)
+    ? body.themes.map((item) => String(item).trim().toLowerCase()).filter(Boolean)
+    : [];
+
+  let profile = "";
+  if (mode === "theme") {
+    if (!isValidPortfolioThemes(themes)) {
+      return NextResponse.json(
+        { error: "請至少選擇一個主題（最多三個），例如金融、散熱、AI" },
+        { status: 400 },
+      );
+    }
+    profile = themeSlug(themes);
+  } else {
+    profile = body.profile ?? "";
+    if (!isValidPortfolioProfile(profile) || profile.startsWith("theme_")) {
+      return NextResponse.json(
+        { error: "請選擇風險型態（保守 / 穩健 / 積極）" },
+        { status: 400 },
+      );
+    }
   }
 
   const amount = Number(body.amount);
@@ -76,17 +107,27 @@ export async function POST(request: Request) {
 
   try {
     const agentJob = await createPortfolioJob({
-      profile,
+      mode,
+      profile: mode === "beginner" ? profile : undefined,
+      themes: mode === "theme" ? themes : undefined,
       amount,
       date: date || undefined,
       force: Boolean(body.force),
     });
 
     const initial = agentJob.portfolio;
+    const artifactKey =
+      agentJob.profile ||
+      initial?.artifact_key ||
+      initial?.facts.profile ||
+      profile;
+
     const portfolio = await createPortfolio({
       userId: user.id,
       agentJobId: agentJob.id,
-      profile,
+      mode,
+      profile: artifactKey,
+      themes: mode === "theme" ? themes : [],
       amount,
       tradeDate:
         agentJob.trade_date ||

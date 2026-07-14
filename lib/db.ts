@@ -250,8 +250,10 @@ export function isValidAvgCost(value: number): boolean {
 export async function createPortfolio(input: {
   userId: string;
   agentJobId: string;
-  profile: PortfolioRecord["profile"];
+  profile: string;
   amount: number;
+  mode?: PortfolioRecord["mode"];
+  themes?: string[];
   tradeDate?: string;
   status?: PortfolioRecord["status"];
   narrative?: string | null;
@@ -267,6 +269,8 @@ export async function createPortfolio(input: {
       profile: input.profile,
       amount: input.amount,
       status: input.status ?? "queued",
+      mode: input.mode ?? "beginner",
+      themes: input.themes ?? [],
       ...(input.tradeDate ? { trade_date: input.tradeDate } : {}),
       ...(input.narrative !== undefined ? { narrative: input.narrative } : {}),
       ...(input.factsJson !== undefined ? { facts_json: input.factsJson } : {}),
@@ -394,7 +398,25 @@ export function isValidPortfolioStatus(
 export function isValidPortfolioProfile(
   value: string,
 ): value is PortfolioRecord["profile"] {
-  return ["conservative", "balanced", "aggressive"].includes(value);
+  return (
+    ["conservative", "balanced", "aggressive"].includes(value) ||
+    /^theme_[a-z0-9_]+$/.test(value)
+  );
+}
+
+export function isValidPortfolioMode(
+  value: string,
+): value is PortfolioRecord["mode"] {
+  return value === "beginner" || value === "theme";
+}
+
+export function isValidPortfolioThemes(values: unknown): values is string[] {
+  if (!Array.isArray(values) || values.length === 0 || values.length > 3) {
+    return false;
+  }
+  return values.every(
+    (item) => typeof item === "string" && /^[a-z][a-z0-9_]*$/.test(item),
+  );
 }
 
 export function isValidPortfolioAmount(value: number): boolean {
