@@ -37,6 +37,7 @@ const PROFILES: ProfileMeta[] = [
 ];
 
 const AMOUNT_PRESETS = [100_000, 300_000, 500_000, 1_000_000];
+const MIN_AMOUNT = 50_000;
 
 const VOLATILITY_LABEL: Record<string, string> = {
   low: "低",
@@ -291,13 +292,24 @@ export function TwPortfolioDashboard() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setError("");
+
+    const amountNum = Number(amount);
+    if (
+      !amount ||
+      !Number.isFinite(amountNum) ||
+      !Number.isInteger(amountNum) ||
+      amountNum < MIN_AMOUNT
+    ) {
+      setError(`投入金額須為整數，且不得低於 ${MIN_AMOUNT.toLocaleString("zh-TW")} 元`);
+      return;
+    }
+
     setLoading(true);
     try {
-      const params = new URLSearchParams({ profile });
-      const amountNum = Number(amount);
-      if (amount && Number.isFinite(amountNum) && amountNum > 0) {
-        params.set("amount", String(Math.round(amountNum)));
-      }
+      const params = new URLSearchParams({
+        profile,
+        amount: String(amountNum),
+      });
       const response = await fetch(`/api/portfolio?${params.toString()}`);
       const payload = (await response.json()) as {
         portfolio?: PortfolioResult;
@@ -333,13 +345,16 @@ export function TwPortfolioDashboard() {
             <label className="mb-2 block text-sm font-medium">投入金額（新台幣）</label>
             <input
               type="number"
-              min={1}
-              step={1000}
+              min={MIN_AMOUNT}
+              step={1}
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
               placeholder="例如 300000"
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[16rem] dark:border-zinc-700 dark:bg-black"
             />
+            <p className="mt-1 text-xs text-zinc-500">
+              最低 {MIN_AMOUNT.toLocaleString("zh-TW")} 元，可輸入任意整數金額
+            </p>
             <div className="mt-2 flex flex-wrap gap-2">
               {AMOUNT_PRESETS.map((preset) => (
                 <button

@@ -23,12 +23,19 @@ export async function GET(request: Request) {
     );
   }
 
+  const MIN_AMOUNT = 50_000;
   let amount: number | undefined;
   if (amountRaw) {
     amount = Number(amountRaw);
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (
+      !Number.isFinite(amount) ||
+      !Number.isInteger(amount) ||
+      amount < MIN_AMOUNT
+    ) {
       return NextResponse.json(
-        { error: "請輸入有效的投入金額（正整數）" },
+        {
+          error: `投入金額須為整數，且不得低於 ${MIN_AMOUNT.toLocaleString("zh-TW")} 元`,
+        },
         { status: 400 },
       );
     }
