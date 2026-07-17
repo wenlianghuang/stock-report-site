@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { MarkdownReport } from "@/components/MarkdownReport";
+import { StockChartModal } from "@/components/StockChartModal";
 import { FALLBACK_PORTFOLIO_THEMES } from "@/lib/portfolio-themes";
 import type {
   PortfolioFacts,
@@ -310,6 +311,10 @@ function SummaryCard({ facts }: { facts: PortfolioFacts }) {
 
 function HoldingsTable({ facts }: { facts: PortfolioFacts }) {
   const hasAmount = facts.amount_twd !== undefined && facts.amount_twd !== null;
+  const [activeHolding, setActiveHolding] = useState<{
+    stockId: string;
+    name: string;
+  } | null>(null);
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
       <table className="w-full text-sm">
@@ -329,7 +334,17 @@ function HoldingsTable({ facts }: { facts: PortfolioFacts }) {
         </thead>
         <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
           {facts.holdings.map((holding) => (
-            <tr key={holding.stock_id}>
+            <tr
+              key={holding.stock_id}
+              onClick={() =>
+                setActiveHolding({
+                  stockId: holding.stock_id,
+                  name: holding.name,
+                })
+              }
+              className="cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
+              title="點擊查看 K 線"
+            >
               <td className="px-3 py-2">
                 <div className="font-medium">{holding.name}</div>
                 <div className="text-xs text-zinc-500">{holding.stock_id}</div>
@@ -375,6 +390,14 @@ function HoldingsTable({ facts }: { facts: PortfolioFacts }) {
           ))}
         </tbody>
       </table>
+      {activeHolding ? (
+        <StockChartModal
+          stockId={activeHolding.stockId}
+          stockName={activeHolding.name}
+          tradeDate={facts.trade_date}
+          onClose={() => setActiveHolding(null)}
+        />
+      ) : null}
     </div>
   );
 }

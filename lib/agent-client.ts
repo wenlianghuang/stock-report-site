@@ -1,9 +1,19 @@
 import type {
   AgentJob,
+  ChipFacts,
+  HistoryDay,
   PortfolioJob,
   PortfolioProfile,
   PortfolioResult,
 } from "./types";
+
+export type StockChart = {
+  stockId: string;
+  stockName?: string;
+  tradeDate?: string;
+  history: HistoryDay[];
+  facts?: ChipFacts;
+};
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:8765";
 
@@ -303,6 +313,56 @@ export async function listPortfolioThemes(): Promise<
     }>;
   };
   return payload.themes ?? [];
+}
+
+export async function getStockChart(
+  stockId: string,
+  tradeDate?: string,
+): Promise<StockChart | null> {
+  const params = new URLSearchParams();
+  if (tradeDate) {
+    params.set("date", tradeDate);
+  }
+  const query = params.toString();
+  const url = `${baseUrl()}/stocks/${encodeURIComponent(stockId)}/chart${
+    query ? `?${query}` : ""
+  }`;
+
+  const response = await fetch(url, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      detail = data.detail ?? "";
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail || `Agent API error ${response.status}`);
+  }
+
+  const payload = (await response.json()) as {
+    stock_id: string;
+    stock_name?: string | null;
+    trade_date?: string | null;
+    history_json?: HistoryDay[] | null;
+    facts_json?: ChipFacts | null;
+  };
+
+  return {
+    stockId: payload.stock_id,
+    stockName: payload.stock_name ?? undefined,
+    tradeDate: payload.trade_date ?? undefined,
+    history: payload.history_json ?? [],
+    facts: payload.facts_json ?? undefined,
+  };
 }
 
 export async function checkAgentHealth(): Promise<boolean> {
