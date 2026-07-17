@@ -112,7 +112,12 @@ export function StockChartModal({
         </div>
 
         {loading ? (
-          <p className="py-10 text-center text-sm text-zinc-500">圖表載入中…</p>
+          <p className="py-10 text-center text-sm text-zinc-500">
+            圖表載入中…
+            <span className="mt-1 block text-xs text-zinc-400">
+              若尚未抓過該股資料，會自動補抓價量（約數十秒，不會產生報告）
+            </span>
+          </p>
         ) : error ? (
           <p className="py-10 text-center text-sm text-zinc-600 dark:text-zinc-400">
             {error}

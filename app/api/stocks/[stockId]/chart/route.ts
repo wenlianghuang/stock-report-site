@@ -3,6 +3,9 @@ import { requireUser } from "@/lib/auth";
 import { isValidStockId, isValidTradeDate } from "@/lib/db";
 import { checkAgentHealth, getStockChart } from "@/lib/agent-client";
 
+/** Allow on-demand stock-report fetch when chart CSV is missing. */
+export const maxDuration = 120;
+
 type RouteContext = {
   params: Promise<{ stockId: string }>;
 };
@@ -46,7 +49,7 @@ export async function GET(request: Request, context: RouteContext) {
     const chart = await getStockChart(stockId, tradeDate || undefined);
     if (!chart) {
       return NextResponse.json(
-        { error: "找不到該股票的圖表資料（尚未抓取）" },
+        { error: "找不到該股票的圖表資料（抓取後仍無資料）" },
         { status: 404 },
       );
     }
