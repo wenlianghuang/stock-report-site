@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { ReportStatusBadge } from "@/components/ReportStatusBadge";
+import { VoiceReportModal } from "@/components/VoiceReportModal";
+import type { VoiceReportFields } from "@/lib/voice-parse";
 import type { ReportRecord } from "@/lib/types";
 
 const CHIP_READY_MINUTES = 21 * 60 + 30;
@@ -120,6 +122,8 @@ export function TwStockDashboard() {
   const [openYears, setOpenYears] = useState<Record<string, boolean>>({});
   const [openMonths, setOpenMonths] = useState<Record<string, boolean>>({});
   const [openDays, setOpenDays] = useState<Record<string, boolean>>({});
+  const [inputMode, setInputMode] = useState<"text" | "voice">("text");
+  const [voiceModalOpen, setVoiceModalOpen] = useState(false);
 
   function normalizedStockId(value: string) {
     const id = value.trim();
@@ -252,8 +256,40 @@ export function TwStockDashboard() {
     });
   }, [reports, tradeDate]);
 
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault();
+  function applyVoiceFields(fields: VoiceReportFields) {
+    setStockId(fields.stockId.trim());
+    setIsHolding(fields.isHolding);
+    setShareCount(fields.isHolding ? fields.shareCount : "");
+    setAvgCost(fields.isHolding ? fields.avgCost : "");
+    setHoldingLoadedFor(fields.stockId.trim() || null);
+    setSentNotice("已從語音填入，請確認欄位後再按「開始分析」");
+  }
+
+  function closeVoiceModal() {
+    setVoiceModalOpen(false);
+    setInputMode("text");
+  }
+
+  function selectInputMode(mode: "text" | "voice") {
+    setInputMode(mode);
+    if (mode === "voice") {
+      setVoiceModalOpen(true);
+    } else {
+      setVoiceModalOpen(false);
+    }
+  }
+
+  function handleVoiceConfirm(fields: VoiceReportFields) {
+    applyVoiceFields(fields);
+    closeVoiceModal();
+  }
+
+  async function createReportFromFields(fields: {
+    stockId: string;
+    isHolding: boolean;
+    shareCount: string;
+    avgCost: string;
+  }) {
     setError("");
     setLoading(true);
 
@@ -262,13 +298,13 @@ export function TwStockDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          stockId,
+          stockId: fields.stockId.trim(),
           ...(tradeDate ? { tradeDate } : {}),
-          ...(isHolding
+          ...(fields.isHolding
             ? {
                 isHolding: true,
-                shareCount: Number(shareCount),
-                avgCost: Number(avgCost),
+                shareCount: Number(fields.shareCount),
+                avgCost: Number(fields.avgCost),
               }
             : {}),
         }),
@@ -289,6 +325,11 @@ export function TwStockDashboard() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    await createReportFromFields({ stockId, isHolding, shareCount, avgCost });
   }
 
   async function onDelete(report: ReportRecord) {
@@ -356,7 +397,40 @@ export function TwStockDashboard() {
       </div>
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <h2 className="text-lg font-medium">產生新報告</h2>
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <h2 className="text-lg font-medium">產生新報告</h2>
+          <fieldset className="flex flex-wrap items-center gap-4 border-0 p-0 text-sm">
+            <legend className="sr-only">填寫方式</legend>
+            <label className="flex cursor-pointer items-center gap-2 text-zinc-700 dark:text-zinc-300">
+              <input
+                type="radio"
+                name="report-input-mode"
+                checked={inputMode === "text"}
+                onChange={() => selectInputMode("text")}
+                className="h-4 w-4 border-zinc-300"
+              />
+              文字填寫
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-zinc-700 dark:text-zinc-300">
+              <input
+                type="radio"
+                name="report-input-mode"
+                checked={inputMode === "voice"}
+                onChange={() => selectInputMode("voice")}
+                className="h-4 w-4 border-zinc-300"
+              />
+              語音填寫
+            </label>
+          </fieldset>
+        </div>
+
+        <VoiceReportModal
+          open={voiceModalOpen}
+          disabled={loading}
+          onClose={closeVoiceModal}
+          onConfirm={handleVoiceConfirm}
+        />
+
         <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <input

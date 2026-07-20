@@ -29,6 +29,7 @@
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
 | `ANTIGRAVITY_API_URL` | Stock API 公網 URL（本機開發用 `http://127.0.0.1:8765`） |
+| `STT_API_URL` | 語音辨識服務 URL（本機 `make serve` 預設 `http://127.0.0.1:8787`） |
 | `SMTP_USER` | Gmail 帳號（寄件者） |
 | `SMTP_PASS` | Gmail App Password（需先開 2FA） |
 | `EMAIL_FROM` | （可選）寄件者顯示名稱，例如 `Stock Report <wenliangmatt@gmail.com>` |
@@ -52,16 +53,30 @@ uv sync --extra server --extra ui --extra stock
 uv run --extra server --extra ui --extra stock python main.py api
 ```
 
-### 3. 啟動網站
+### 3. STT 語音服務（可選，語音填表需要）
+
+需本機已建好 [AI_Speech/stt](../AI_Speech/stt)（whisper.cpp + `ggml-medium.bin`，並安裝 `ffmpeg` 以解碼瀏覽器 webm）：
+
+```bash
+cd ../AI_Speech/stt
+make serve
+# 預設 http://127.0.0.1:8787 ；POST /transcribe、GET /health
+```
+
+在 `.env.local` 設定 `STT_API_URL=http://127.0.0.1:8787`（見 `.env.local.example`）。
+
+Dashboard「語音填表」：錄音 → 辨識 → 預覽／微調 →「確認並開始分析」或「只填入表單」。不會在未確認時自動送出。
+
+### 4. 啟動網站
 
 ```bash
 npm install
 npm run dev
 ```
 
-開啟 [http://localhost:3000](http://localhost:3000) → 註冊 → 輸入股號。
+開啟 [http://localhost:3000](http://localhost:3000) → 註冊 → 輸入股號（或語音填表）。
 
-### 4. 測試 Auth API
+### 5. 測試 Auth API
 
 ```bash
 npm run dev   # 另一個終端
