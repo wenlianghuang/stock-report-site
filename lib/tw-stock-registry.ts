@@ -1,3 +1,5 @@
+import { toTraditionalChinese } from "@/lib/zh-convert";
+
 type RegistryData = {
   idToName: Map<string, string>;
   sortedNameToId: Array<[name: string, stockId: string]>;
@@ -52,8 +54,10 @@ const TWSE_LISTED_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L";
 const TPEX_OTC_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O";
 
 function normalizeName(name: string): string {
-  return name
+  return toTraditionalChinese(name)
     .trim()
+    // TWSE/TPEx short names use 台 (not 臺); OpenCC tw often emits 臺.
+    .replace(/臺/g, "台")
     .replace(/\s+/g, "")
     .replace(/[()（）【】\[\]「」『』]/g, "")
     .replace(/股份有限公司/g, "")
@@ -169,6 +173,7 @@ export async function resolveStockNameById(stockId: string): Promise<string | nu
 }
 
 export async function resolveStockIdFromText(text: string): Promise<string | null> {
+  // Whisper `zh` often emits Simplified; dictionary is Traditional (TWSE/TPEx).
   const query = normalizeName(text);
   if (!query) return null;
   const registry = await getRegistry();

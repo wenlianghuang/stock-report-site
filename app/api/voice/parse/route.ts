@@ -5,6 +5,7 @@ import {
   resolveStockIdFromText,
   resolveStockNameById,
 } from "@/lib/tw-stock-registry";
+import { toTraditionalChinese } from "@/lib/zh-convert";
 
 export async function POST(request: Request) {
   const user = await requireUser();
@@ -13,11 +14,13 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => ({}))) as { text?: string };
-  const text = body.text?.trim() ?? "";
-  if (!text) {
+  const rawText = body.text?.trim() ?? "";
+  if (!rawText) {
     return NextResponse.json({ error: "請提供辨識文字" }, { status: 400 });
   }
 
+  // Whisper / mixed STT may be Simplified; show & match in Traditional.
+  const text = toTraditionalChinese(rawText);
   const parsed = parseVoiceReportCommand(text);
   let stockId = parsed.fields.stockId;
   if (!stockId) {

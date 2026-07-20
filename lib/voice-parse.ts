@@ -1,3 +1,5 @@
+import { toTraditionalChinese } from "@/lib/zh-convert";
+
 export type VoiceReportFields = {
   stockId: string;
   isHolding: boolean;
@@ -64,7 +66,9 @@ const UNIT_VALUE: Record<string, number> = {
 };
 
 function normalizeText(raw: string): string {
-  return raw
+  // Whisper zh often emits Simplified; normalize to Traditional for TW matching.
+  return toTraditionalChinese(raw)
+    .replace(/臺/g, "台")
     .replace(/\s+/g, "")
     .replace(/[，,。.!！？?]/g, "")
     .trim();
