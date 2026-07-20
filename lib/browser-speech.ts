@@ -97,21 +97,21 @@ export function startBrowserSpeech(
     }, timeoutMs);
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let nextFinal = "";
-      let nextInterim = "";
+      // Rebuild from scratch each time. event.results is cumulative;
+      // appending would repeat older finals (e.g. "富採85000" × N).
+      let rebuiltFinal = "";
+      let rebuiltInterim = "";
       for (let i = 0; i < event.results.length; i += 1) {
         const part = event.results[i]?.[0]?.transcript ?? "";
         if (!part) continue;
         if (event.results[i]?.isFinal) {
-          nextFinal += part;
+          rebuiltFinal += part;
         } else {
-          nextInterim += part;
+          rebuiltInterim += part;
         }
       }
-      if (nextFinal) {
-        finalText = `${finalText} ${nextFinal}`.trim();
-      }
-      latestInterim = nextInterim.trim();
+      finalText = rebuiltFinal.trim();
+      latestInterim = rebuiltInterim.trim();
       onInterim?.(`${finalText} ${latestInterim}`.trim());
     };
 
