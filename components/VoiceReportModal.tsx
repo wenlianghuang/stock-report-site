@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { isBrowserSpeechSupported, listenOnce } from "@/lib/browser-speech";
 import type { VoiceReportFields } from "@/lib/voice-parse";
 
 export type VoicePreviewPayload = {
@@ -8,7 +9,10 @@ export type VoicePreviewPayload = {
   fields: VoiceReportFields;
   warnings: string[];
   canConfirm: boolean;
+  engine?: string;
 };
+
+type VoiceEngine = "whisper" | "browser";
 
 type Props = {
   open: boolean;
@@ -45,17 +49,35 @@ function draftReady(fields: VoiceReportFields): boolean {
   );
 }
 
+async function applyParsedText(text: string): Promise<VoicePreviewPayload> {
+  const response = await fetch("/api/voice/parse", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  const payload = (await response.json()) as VoicePreviewPayload & {
+    error?: string;
+  };
+  if (!response.ok) {
+    throw new Error(payload.error ?? "解析失敗");
+  }
+  return payload;
+}
+
 export function VoiceReportModal({
   open,
   disabled,
   onClose,
   onConfirm,
 }: Props) {
+  const [engine, setEngine] = useState<VoiceEngine>("browser");
+  const [engineLabel, setEngineLabel] = useState("");
   const [recState, setRecState] = useState<RecState>("idle");
   const [step, setStep] = useState<Step>("speak");
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<VoicePreviewPayload | null>(null);
   const [draft, setDraft] = useState<VoiceReportFields | null>(null);
+  const [liveTranscript, setLiveTranscript] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
@@ -66,6 +88,7 @@ export function VoiceReportModal({
     setError("");
     setPreview(null);
     setDraft(null);
+    setLiveTranscript("");
     chunksRef.current = [];
   }
 
@@ -86,13 +109,42 @@ export function VoiceReportModal({
       return;
     }
 
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/voice/config", { cache: "no-store" });
+        if (!response.ok) {
+          setEngine(isBrowserSpeechSupported() ? "browser" : "whisper");
+          return;
+        }
+        const data = (await response.json()) as {
+          engine?: VoiceEngine;
+          label?: string;
+        };
+        if (cancelled) return;
+        if (data.engine === "whisper") {
+          setEngine("whisper");
+        } else {
+          setEngine(isBrowserSpeechSupported() ? "browser" : "whisper");
+        }
+        setEngineLabel(data.label ?? "");
+      } catch {
+        if (!cancelled) {
+          setEngine(isBrowserSpeechSupported() ? "browser" : "whisper");
+        }
+      }
+    })();
+
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && recState !== "recording") {
         onClose();
       }
     };
     window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("keydown", handleKey);
+    };
   }, [open, onClose, recState]);
 
   function stopTracks() {
@@ -100,7 +152,40 @@ export function VoiceReportModal({
     streamRef.current = null;
   }
 
-  async function startRecording() {
+  function showPreview(payload: VoicePreviewPayload) {
+    setPreview({
+      text: payload.text,
+      fields: payload.fields,
+      warnings: payload.warnings ?? [],
+      canConfirm: payload.canConfirm,
+      engine: payload.engine,
+    });
+    setDraft({ ...payload.fields });
+    setStep("confirm");
+  }
+
+  async function startBrowserListening() {
+    setError("");
+    setPreview(null);
+    setDraft(null);
+    setLiveTranscript("");
+    setStep("speak");
+    setRecState("recording");
+
+    try {
+      const text = await listenOnce();
+      setLiveTranscript(text);
+      setRecState("uploading");
+      const payload = await applyParsedText(text);
+      showPreview(payload);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "語音辨識失敗");
+    } finally {
+      setRecState("idle");
+    }
+  }
+
+  async function startWhisperRecording() {
     setError("");
     setPreview(null);
     setDraft(null);
@@ -137,7 +222,19 @@ export function VoiceReportModal({
     }
   }
 
+  async function startRecording() {
+    if (engine === "browser") {
+      await startBrowserListening();
+      return;
+    }
+    await startWhisperRecording();
+  }
+
   function stopRecording() {
+    if (engine === "browser") {
+      // browser path auto-stops; button hidden in browser mode
+      return;
+    }
     const recorder = mediaRecorderRef.current;
     if (!recorder || recorder.state === "inactive") {
       stopTracks();
@@ -175,20 +272,23 @@ export function VoiceReportModal({
       });
       const payload = (await response.json()) as VoicePreviewPayload & {
         error?: string;
+        useBrowser?: boolean;
       };
+
       if (!response.ok) {
+        if (payload.useBrowser && isBrowserSpeechSupported()) {
+          setEngine("browser");
+          setEngineLabel("瀏覽器語音辨識");
+          setError("伺服器辨識不可用，已改為瀏覽器語音。請再按一次開始。");
+          setRecState("idle");
+          return;
+        }
         setError(payload.error ?? "語音辨識失敗");
         setRecState("idle");
         return;
       }
-      setPreview({
-        text: payload.text,
-        fields: payload.fields,
-        warnings: payload.warnings ?? [],
-        canConfirm: payload.canConfirm,
-      });
-      setDraft({ ...payload.fields });
-      setStep("confirm");
+
+      showPreview(payload);
     } catch {
       setError("網路錯誤，請稍後再試");
     } finally {
@@ -210,6 +310,7 @@ export function VoiceReportModal({
   if (!open) return null;
 
   const busy = disabled || recState === "uploading";
+  const isBrowserMode = engine === "browser";
 
   return (
     <div
@@ -230,6 +331,11 @@ export function VoiceReportModal({
             </h2>
             <p className="mt-1 text-xs text-zinc-500">
               請口述股號與持股資訊，辨識後請確認是否正確。
+              {engineLabel ? (
+                <span className="mt-0.5 block text-zinc-400">
+                  辨識引擎：{engineLabel}
+                </span>
+              ) : null}
             </p>
           </div>
           <button
@@ -252,6 +358,11 @@ export function VoiceReportModal({
               <p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
                 範例：「分析二三零三，持股兩千股，均價五十」或「幫我看聯電，沒有持股」
               </p>
+              {isBrowserMode ? (
+                <p className="mt-2 text-xs text-zinc-500">
+                  正式網站使用瀏覽器內建語音辨識，無需本機 STT 服務。
+                </p>
+              ) : null}
             </div>
 
             {recState === "recording" ? (
@@ -260,14 +371,21 @@ export function VoiceReportModal({
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
                   <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" />
                 </span>
-                <p className="text-sm font-medium text-red-600">錄音中…</p>
-                <button
-                  type="button"
-                  onClick={stopRecording}
-                  className="rounded-lg bg-red-600 px-5 py-2 text-sm font-medium text-white hover:bg-red-500"
-                >
-                  說完了，停止辨識
-                </button>
+                <p className="text-sm font-medium text-red-600">
+                  {isBrowserMode ? "請開始說話…" : "錄音中…"}
+                </p>
+                {!isBrowserMode ? (
+                  <button
+                    type="button"
+                    onClick={stopRecording}
+                    className="rounded-lg bg-red-600 px-5 py-2 text-sm font-medium text-white hover:bg-red-500"
+                  >
+                    說完了，停止辨識
+                  </button>
+                ) : null}
+                {liveTranscript ? (
+                  <p className="text-center text-xs text-zinc-500">{liveTranscript}</p>
+                ) : null}
               </div>
             ) : recState === "uploading" ? (
               <p className="py-6 text-center text-sm text-zinc-500">辨識中…</p>
@@ -278,7 +396,7 @@ export function VoiceReportModal({
                 onClick={() => void startRecording()}
                 className="w-full rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
               >
-                開始錄音
+                {isBrowserMode ? "開始說話" : "開始錄音"}
               </button>
             )}
 

@@ -1,17 +1,22 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { parseVoiceReportCommand } from "@/lib/voice-parse";
-
-const DEFAULT_STT_URL = "http://127.0.0.1:8787";
-
-function sttBaseUrl(): string {
-  return process.env.STT_API_URL?.trim() || DEFAULT_STT_URL;
-}
+import { resolveVoiceEngine, whisperSttUrl } from "@/lib/voice-config";
 
 export async function POST(request: Request) {
   const user = await requireUser();
   if (!user) {
     return NextResponse.json({ error: "未登入" }, { status: 401 });
+  }
+
+  if (resolveVoiceEngine() !== "whisper") {
+    return NextResponse.json(
+      {
+        error: "伺服器未設定 Whisper STT，請改用瀏覽器語音辨識",
+        useBrowser: true,
+      },
+      { status: 503 },
+    );
   }
 
   let form: FormData;
@@ -36,7 +41,7 @@ export async function POST(request: Request) {
     audio.name || `recording.${guessExt(audio.type)}`,
   );
 
-  const base = sttBaseUrl();
+  const base = whisperSttUrl();
   let sttResponse: Response;
   try {
     sttResponse = await fetch(`${base}/transcribe`, {
@@ -47,7 +52,8 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json(
       {
-        error: `STT 服務連不上（${base}）。請在 stt 目錄執行：make serve`,
+        error: `STT 服務連不上（${base}）`,
+        useBrowser: true,
       },
       { status: 503 },
     );
@@ -62,7 +68,10 @@ export async function POST(request: Request) {
 
   if (!sttResponse.ok) {
     return NextResponse.json(
-      { error: sttPayload.error ?? "語音辨識失敗" },
+      {
+        error: sttPayload.error ?? "語音辨識失敗",
+        useBrowser: true,
+      },
       { status: sttResponse.status >= 400 ? sttResponse.status : 502 },
     );
   }
@@ -77,6 +86,7 @@ export async function POST(request: Request) {
     fields: parsed.fields,
     warnings: parsed.warnings,
     canConfirm: parsed.canConfirm,
+    engine: "whisper",
   });
 }
 

@@ -29,7 +29,7 @@
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
 | `ANTIGRAVITY_API_URL` | Stock API 公網 URL（本機開發用 `http://127.0.0.1:8765`） |
-| `STT_API_URL` | 語音辨識服務 URL（本機 `make serve` 預設 `http://127.0.0.1:8787`） |
+| `STT_API_URL` | （可選）Whisper STT 公網 URL。未設定時正式站自動用瀏覽器語音；本機預設 `http://127.0.0.1:8787` |
 | `SMTP_USER` | Gmail 帳號（寄件者） |
 | `SMTP_PASS` | Gmail App Password（需先開 2FA） |
 | `EMAIL_FROM` | （可選）寄件者顯示名稱，例如 `Stock Report <wenliangmatt@gmail.com>` |
@@ -53,9 +53,11 @@ uv sync --extra server --extra ui --extra stock
 uv run --extra server --extra ui --extra stock python main.py api
 ```
 
-### 3. STT 語音服務（可選，語音填表需要）
+### 3. STT 語音服務（可選，本機 Whisper 品質較佳）
 
-需本機已建好 [AI_Speech/stt](../AI_Speech/stt)（whisper.cpp + `ggml-medium.bin`，並安裝 `ffmpeg` 以解碼瀏覽器 webm）：
+正式站（Vercel）**不需**設定 `STT_API_URL`，會自動使用瀏覽器內建語音辨識（Chrome / Edge / Safari）。
+
+若要用本機 Whisper（品質較好），需本機已建好 [AI_Speech/stt](../AI_Speech/stt)（whisper.cpp + `ggml-medium.bin`，並安裝 `ffmpeg`）：
 
 ```bash
 cd ../AI_Speech/stt
@@ -63,9 +65,11 @@ make serve
 # 預設 http://127.0.0.1:8787 ；POST /transcribe、GET /health
 ```
 
-在 `.env.local` 設定 `STT_API_URL=http://127.0.0.1:8787`（見 `.env.local.example`）。
+本機開發在 `.env.local` 設定 `STT_API_URL=http://127.0.0.1:8787`（見 `.env.local.example`）。
 
-Dashboard「語音填表」：錄音 → 辨識 → 預覽／微調 →「確認並開始分析」或「只填入表單」。不會在未確認時自動送出。
+若將 Whisper 部署到有公網 URL 的機器，在 Vercel 設定 `STT_API_URL=https://stt.yourdomain.com` 即可切回伺服器辨識。
+
+Dashboard「語音填寫」：錄音 → 辨識 → 預覽／微調 →「確認並開始分析」或「只填入表單」。不會在未確認時自動送出。
 
 ### 4. 啟動網站
 
