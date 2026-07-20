@@ -1,8 +1,13 @@
 type SpeechRecognitionErrorEvent = Event & { error: string };
 
+type SpeechRecognitionResultItem = {
+  isFinal: boolean;
+  0?: { transcript?: string };
+};
+
 type SpeechRecognitionResultList = {
   length: number;
-  [index: number]: { 0?: { transcript?: string } };
+  [index: number]: SpeechRecognitionResultItem;
 };
 
 type SpeechRecognitionEvent = Event & {
@@ -36,23 +41,39 @@ export function isBrowserSpeechSupported(): boolean {
   return getSpeechRecognition() !== null;
 }
 
-/** Listen once via Web Speech API (zh-TW). Rejects on error or empty result. */
-export function listenOnce(timeoutMs = 15000): Promise<string> {
+export type BrowserSpeechSession = {
+  stop: () => void;
+  result: Promise<string>;
+};
+
+/** Start browser speech recognition and stop manually via stop(). */
+export function startBrowserSpeech(
+  timeoutMs = 30000,
+  onInterim?: (text: string) => void,
+): BrowserSpeechSession {
   const Ctor = getSpeechRecognition();
   if (!Ctor) {
-    return Promise.reject(new Error("此瀏覽器不支援語音辨識（請用 Chrome / Edge / Safari）"));
+    return {
+      stop: () => {},
+      result: Promise.reject(
+        new Error("此瀏覽器不支援語音辨識（請用 Chrome / Edge / Safari）"),
+      ),
+    };
   }
 
-  return new Promise((resolve, reject) => {
-    const recognition = new Ctor();
-    recognition.lang = "zh-TW";
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
+  const recognition = new Ctor();
+  recognition.lang = "zh-TW";
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
 
-    let settled = false;
-    let gotResult = false;
+  let settled = false;
+  let stoppedByUser = false;
+  let timedOut = false;
+  let finalText = "";
+  let latestInterim = "";
 
+  const result = new Promise<string>((resolve, reject) => {
     const finish = (fn: () => void) => {
       if (settled) return;
       settled = true;
@@ -61,30 +82,44 @@ export function listenOnce(timeoutMs = 15000): Promise<string> {
     };
 
     const timer = window.setTimeout(() => {
+      timedOut = true;
       try {
         recognition.stop();
       } catch {
         // ignore
       }
-      finish(() => reject(new Error("語音辨識逾時，請再試一次")));
+      const merged = `${finalText} ${latestInterim}`.trim();
+      if (merged) {
+        finish(() => resolve(merged));
+      } else {
+        finish(() => reject(new Error("語音辨識逾時，請再試一次")));
+      }
     }, timeoutMs);
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      gotResult = true;
-      const transcript = Array.from(event.results)
-        .map((result) => result[0]?.transcript ?? "")
-        .join("")
-        .trim();
-      if (!transcript) {
-        finish(() => reject(new Error("沒有辨識到內容，請再試一次")));
-        return;
+      let nextFinal = "";
+      let nextInterim = "";
+      for (let i = 0; i < event.results.length; i += 1) {
+        const part = event.results[i]?.[0]?.transcript ?? "";
+        if (!part) continue;
+        if (event.results[i]?.isFinal) {
+          nextFinal += part;
+        } else {
+          nextInterim += part;
+        }
       }
-      finish(() => resolve(transcript));
+      if (nextFinal) {
+        finalText = `${finalText} ${nextFinal}`.trim();
+      }
+      latestInterim = nextInterim.trim();
+      onInterim?.(`${finalText} ${latestInterim}`.trim());
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       const code = event.error;
-      if (code === "aborted") return;
+      if (code === "aborted" && stoppedByUser) {
+        return;
+      }
       const message =
         code === "not-allowed"
           ? "麥克風權限被拒絕，請在瀏覽器設定中允許"
@@ -95,9 +130,17 @@ export function listenOnce(timeoutMs = 15000): Promise<string> {
     };
 
     recognition.onend = () => {
-      if (!gotResult) {
-        finish(() => reject(new Error("沒有聽到語音，請再試一次")));
+      if (settled) return;
+      const merged = `${finalText} ${latestInterim}`.trim();
+      if (merged) {
+        finish(() => resolve(merged));
+        return;
       }
+      if (timedOut) {
+        finish(() => reject(new Error("語音辨識逾時，請再試一次")));
+        return;
+      }
+      finish(() => reject(new Error("沒有聽到語音，請再試一次")));
     };
 
     try {
@@ -106,4 +149,16 @@ export function listenOnce(timeoutMs = 15000): Promise<string> {
       finish(() => reject(new Error("無法啟動語音辨識")));
     }
   });
+
+  return {
+    stop: () => {
+      stoppedByUser = true;
+      try {
+        recognition.stop();
+      } catch {
+        // ignore
+      }
+    },
+    result,
+  };
 }

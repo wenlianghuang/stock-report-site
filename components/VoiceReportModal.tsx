@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { isBrowserSpeechSupported, listenOnce } from "@/lib/browser-speech";
+import {
+  isBrowserSpeechSupported,
+  startBrowserSpeech,
+  type BrowserSpeechSession,
+} from "@/lib/browser-speech";
 import type { VoiceReportFields } from "@/lib/voice-parse";
 
 export type VoicePreviewPayload = {
@@ -81,6 +85,7 @@ export function VoiceReportModal({
   const [draftStockName, setDraftStockName] = useState<string | null>(null);
   const [liveTranscript, setLiveTranscript] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const browserSessionRef = useRef<BrowserSpeechSession | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -98,6 +103,7 @@ export function VoiceReportModal({
   useEffect(() => {
     return () => {
       mediaRecorderRef.current?.stop();
+      browserSessionRef.current?.stop();
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
@@ -105,9 +111,11 @@ export function VoiceReportModal({
   useEffect(() => {
     if (!open) {
       mediaRecorderRef.current?.stop();
+      browserSessionRef.current?.stop();
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       mediaRecorderRef.current = null;
+      browserSessionRef.current = null;
       resetSession();
       return;
     }
@@ -206,7 +214,12 @@ export function VoiceReportModal({
     setRecState("recording");
 
     try {
-      const text = await listenOnce();
+      const session = startBrowserSpeech(30000, (interimText) => {
+        setLiveTranscript(interimText);
+      });
+      browserSessionRef.current = session;
+      const text = await session.result;
+      browserSessionRef.current = null;
       setLiveTranscript(text);
       setRecState("uploading");
       const payload = await applyParsedText(text);
@@ -214,6 +227,7 @@ export function VoiceReportModal({
     } catch (err) {
       setError(err instanceof Error ? err.message : "語音辨識失敗");
     } finally {
+      browserSessionRef.current = null;
       setRecState("idle");
     }
   }
@@ -265,7 +279,8 @@ export function VoiceReportModal({
 
   function stopRecording() {
     if (engine === "browser") {
-      // browser path auto-stops; button hidden in browser mode
+      browserSessionRef.current?.stop();
+      setRecState("uploading");
       return;
     }
     const recorder = mediaRecorderRef.current;
@@ -407,15 +422,13 @@ export function VoiceReportModal({
                 <p className="text-sm font-medium text-red-600">
                   {isBrowserMode ? "請開始說話…" : "錄音中…"}
                 </p>
-                {!isBrowserMode ? (
-                  <button
-                    type="button"
-                    onClick={stopRecording}
-                    className="rounded-lg bg-red-600 px-5 py-2 text-sm font-medium text-white hover:bg-red-500"
-                  >
-                    說完了，停止辨識
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  onClick={stopRecording}
+                  className="rounded-lg bg-red-600 px-5 py-2 text-sm font-medium text-white hover:bg-red-500"
+                >
+                  說完了，停止辨識
+                </button>
                 {liveTranscript ? (
                   <p className="text-center text-xs text-zinc-500">{liveTranscript}</p>
                 ) : null}
