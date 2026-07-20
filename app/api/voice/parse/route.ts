@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { parseVoiceReportCommand } from "@/lib/voice-parse";
+import { companyNameByStockId, parseVoiceReportCommand } from "@/lib/voice-parse";
 
 export async function POST(request: Request) {
   const user = await requireUser();
@@ -18,6 +18,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     text,
     fields: parsed.fields,
+    stockName: companyNameByStockId(parsed.fields.stockId),
     warnings: parsed.warnings,
     canConfirm: parsed.canConfirm,
     engine: "browser",

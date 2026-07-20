@@ -49,6 +49,26 @@ const NAME_TO_CODE: Record<string, string> = {
   群創: "3481",
 };
 
+const STOCK_ID_TO_NAME: Record<string, string> = {
+  "1301": "台塑",
+  "1303": "南亞",
+  "2002": "中鋼",
+  "2303": "聯電",
+  "2317": "鴻海",
+  "2324": "仁寶",
+  "2330": "台積電",
+  "2382": "廣達",
+  "2409": "友達",
+  "2454": "聯發科",
+  "2881": "富邦金",
+  "2882": "國泰金",
+  "2886": "兆豐金",
+  "3231": "緯創",
+  "3481": "群創",
+  "3711": "日月光",
+  "4938": "和碩",
+};
+
 const DIGIT_CHAR: Record<string, string> = {
   "0": "0",
   "1": "1",
@@ -330,4 +350,9 @@ export function parseVoiceReportCommand(transcript: string): VoiceParseResult {
     warnings,
     canConfirm: /^\d{4,6}$/.test(stockId),
   };
+}
+
+export function companyNameByStockId(stockId: string): string | null {
+  const id = stockId.trim();
+  return STOCK_ID_TO_NAME[id] ?? null;
 }

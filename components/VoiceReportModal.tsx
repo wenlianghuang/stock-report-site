@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { isBrowserSpeechSupported, listenOnce } from "@/lib/browser-speech";
-import type { VoiceReportFields } from "@/lib/voice-parse";
+import { companyNameByStockId, type VoiceReportFields } from "@/lib/voice-parse";
 
 export type VoicePreviewPayload = {
   text: string;
   fields: VoiceReportFields;
+  stockName?: string | null;
   warnings: string[];
   canConfirm: boolean;
   engine?: string;
@@ -156,6 +157,7 @@ export function VoiceReportModal({
     setPreview({
       text: payload.text,
       fields: payload.fields,
+      stockName: payload.stockName ?? null,
       warnings: payload.warnings ?? [],
       canConfirm: payload.canConfirm,
       engine: payload.engine,
@@ -311,6 +313,7 @@ export function VoiceReportModal({
 
   const busy = disabled || recState === "uploading";
   const isBrowserMode = engine === "browser";
+  const draftStockName = draft ? companyNameByStockId(draft.stockId) : null;
 
   return (
     <div
@@ -434,6 +437,12 @@ export function VoiceReportModal({
                       onChange={(e) => updateDraft("stockId", e.target.value)}
                       className="w-24 rounded border border-zinc-300 bg-white px-2 py-1 text-right text-sm dark:border-zinc-600 dark:bg-black"
                     />
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-zinc-500">公司名稱</dt>
+                  <dd className="text-zinc-700 dark:text-zinc-200">
+                    {draftStockName ?? "（未對到公司，請再確認股號）"}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">

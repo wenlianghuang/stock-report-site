@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { parseVoiceReportCommand } from "@/lib/voice-parse";
+import { companyNameByStockId, parseVoiceReportCommand } from "@/lib/voice-parse";
 import { resolveVoiceEngine, whisperSttUrl } from "@/lib/voice-config";
 
 export async function POST(request: Request) {
@@ -84,6 +84,7 @@ export async function POST(request: Request) {
     durationSec: sttPayload.duration_sec,
     elapsedMs: sttPayload.elapsed_ms,
     fields: parsed.fields,
+    stockName: companyNameByStockId(parsed.fields.stockId),
     warnings: parsed.warnings,
     canConfirm: parsed.canConfirm,
     engine: "whisper",
