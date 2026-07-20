@@ -6,6 +6,7 @@ import {
   resolveStockNameById,
 } from "@/lib/tw-stock-registry";
 import { toTraditionalChinese } from "@/lib/zh-convert";
+import { collapseRepeatedSpeechFragments } from "@/lib/speech-cleanup";
 
 export async function POST(request: Request) {
   const user = await requireUser();
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
   }
 
   // Whisper / mixed STT may be Simplified; show & match in Traditional.
-  const text = toTraditionalChinese(rawText);
+  const text = collapseRepeatedSpeechFragments(toTraditionalChinese(rawText));
   const parsed = parseVoiceReportCommand(text);
   let stockId = parsed.fields.stockId;
   if (!stockId) {

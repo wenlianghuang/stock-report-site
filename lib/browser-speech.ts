@@ -1,3 +1,5 @@
+import { collapseRepeatedSpeechFragments } from "@/lib/speech-cleanup";
+
 type SpeechRecognitionErrorEvent = Event & { error: string };
 
 type SpeechRecognitionResultItem = {
@@ -88,7 +90,9 @@ export function startBrowserSpeech(
       } catch {
         // ignore
       }
-      const merged = `${finalText} ${latestInterim}`.trim();
+      const merged = collapseRepeatedSpeechFragments(
+        `${finalText} ${latestInterim}`.trim(),
+      );
       if (merged) {
         finish(() => resolve(merged));
       } else {
@@ -112,7 +116,9 @@ export function startBrowserSpeech(
       }
       finalText = rebuiltFinal.trim();
       latestInterim = rebuiltInterim.trim();
-      onInterim?.(`${finalText} ${latestInterim}`.trim());
+      onInterim?.(
+        collapseRepeatedSpeechFragments(`${finalText} ${latestInterim}`.trim()),
+      );
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
@@ -131,7 +137,9 @@ export function startBrowserSpeech(
 
     recognition.onend = () => {
       if (settled) return;
-      const merged = `${finalText} ${latestInterim}`.trim();
+      const merged = collapseRepeatedSpeechFragments(
+        `${finalText} ${latestInterim}`.trim(),
+      );
       if (merged) {
         finish(() => resolve(merged));
         return;
