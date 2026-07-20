@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { companyNameByStockId, parseVoiceReportCommand } from "@/lib/voice-parse";
+import { parseVoiceReportCommand } from "@/lib/voice-parse";
 import { resolveVoiceEngine, whisperSttUrl } from "@/lib/voice-config";
+import {
+  resolveStockIdFromText,
+  resolveStockNameById,
+} from "@/lib/tw-stock-registry";
 
 export async function POST(request: Request) {
   const user = await requireUser();
@@ -78,15 +82,23 @@ export async function POST(request: Request) {
 
   const text = (sttPayload.text ?? "").trim();
   const parsed = parseVoiceReportCommand(text);
+  let stockId = parsed.fields.stockId;
+  if (!stockId) {
+    stockId = (await resolveStockIdFromText(text)) ?? "";
+  }
+  const stockName = stockId ? await resolveStockNameById(stockId) : null;
 
   return NextResponse.json({
     text,
     durationSec: sttPayload.duration_sec,
     elapsedMs: sttPayload.elapsed_ms,
-    fields: parsed.fields,
-    stockName: companyNameByStockId(parsed.fields.stockId),
+    fields: {
+      ...parsed.fields,
+      stockId,
+    },
+    stockName,
     warnings: parsed.warnings,
-    canConfirm: parsed.canConfirm,
+    canConfirm: /^\d{4,6}$/.test(stockId),
     engine: "whisper",
   });
 }

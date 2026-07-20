@@ -12,62 +12,6 @@ export type VoiceParseResult = {
   canConfirm: boolean;
 };
 
-/** Common spoken names / nicknames → TWSE codes (extend as needed). */
-const NAME_TO_CODE: Record<string, string> = {
-  台積電: "2330",
-  台積: "2330",
-  护国神山: "2330",
-  護國神山: "2330",
-  联电: "2303",
-  聯電: "2303",
-  鸿海: "2317",
-  鴻海: "2317",
-  联发科: "2454",
-  聯發科: "2454",
-  广达: "2382",
-  廣達: "2382",
-  仁宝: "2324",
-  仁寶: "2324",
-  纬创: "3231",
-  緯創: "3231",
-  和硕: "4938",
-  和碩: "4938",
-  日月光: "3711",
-  中钢: "2002",
-  中鋼: "2002",
-  台塑: "1301",
-  南亚: "1303",
-  南亞: "1303",
-  国泰金: "2882",
-  國泰金: "2882",
-  富邦金: "2881",
-  兆丰金: "2886",
-  兆豐金: "2886",
-  友达: "2409",
-  友達: "2409",
-  群创: "3481",
-  群創: "3481",
-};
-
-const STOCK_ID_TO_NAME: Record<string, string> = {
-  "1301": "台塑",
-  "1303": "南亞",
-  "2002": "中鋼",
-  "2303": "聯電",
-  "2317": "鴻海",
-  "2324": "仁寶",
-  "2330": "台積電",
-  "2382": "廣達",
-  "2409": "友達",
-  "2454": "聯發科",
-  "2881": "富邦金",
-  "2882": "國泰金",
-  "2886": "兆豐金",
-  "3231": "緯創",
-  "3481": "群創",
-  "3711": "日月光",
-  "4938": "和碩",
-};
 
 const DIGIT_CHAR: Record<string, string> = {
   "0": "0",
@@ -217,14 +161,6 @@ export function parseChineseQuantity(raw: string): number | null {
 }
 
 function extractStockId(text: string, warnings: string[]): string {
-  // Name map first (longer names first)
-  const names = Object.keys(NAME_TO_CODE).sort((a, b) => b.length - a.length);
-  for (const name of names) {
-    if (text.includes(name)) {
-      return NAME_TO_CODE[name]!;
-    }
-  }
-
   const labeled = text.match(
     /(?:股號|代号|代號|股票代號|分析|看看|查看)\s*(\d{4,6})/,
   );
@@ -350,9 +286,4 @@ export function parseVoiceReportCommand(transcript: string): VoiceParseResult {
     warnings,
     canConfirm: /^\d{4,6}$/.test(stockId),
   };
-}
-
-export function companyNameByStockId(stockId: string): string | null {
-  const id = stockId.trim();
-  return STOCK_ID_TO_NAME[id] ?? null;
 }

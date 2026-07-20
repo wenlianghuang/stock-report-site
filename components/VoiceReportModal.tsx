@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { isBrowserSpeechSupported, listenOnce } from "@/lib/browser-speech";
-import { companyNameByStockId, type VoiceReportFields } from "@/lib/voice-parse";
+import type { VoiceReportFields } from "@/lib/voice-parse";
 
 export type VoicePreviewPayload = {
   text: string;
@@ -78,6 +78,7 @@ export function VoiceReportModal({
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<VoicePreviewPayload | null>(null);
   const [draft, setDraft] = useState<VoiceReportFields | null>(null);
+  const [draftStockName, setDraftStockName] = useState<string | null>(null);
   const [liveTranscript, setLiveTranscript] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -89,6 +90,7 @@ export function VoiceReportModal({
     setError("");
     setPreview(null);
     setDraft(null);
+    setDraftStockName(null);
     setLiveTranscript("");
     chunksRef.current = [];
   }
@@ -163,8 +165,37 @@ export function VoiceReportModal({
       engine: payload.engine,
     });
     setDraft({ ...payload.fields });
+    setDraftStockName(payload.stockName ?? null);
     setStep("confirm");
   }
+
+  useEffect(() => {
+    if (!draft) return;
+    const id = draft.stockId.trim();
+    if (!/^\d{4,6}$/.test(id)) {
+      setDraftStockName(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/voice/stock-name?stockId=${encodeURIComponent(id)}`,
+          { cache: "no-store" },
+        );
+        if (!response.ok) return;
+        const payload = (await response.json()) as { stockName?: string | null };
+        if (!cancelled) {
+          setDraftStockName(payload.stockName ?? null);
+        }
+      } catch {
+        // ignore lookup failure in UI
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [draft?.stockId]);
 
   async function startBrowserListening() {
     setError("");
@@ -313,7 +344,6 @@ export function VoiceReportModal({
 
   const busy = disabled || recState === "uploading";
   const isBrowserMode = engine === "browser";
-  const draftStockName = draft ? companyNameByStockId(draft.stockId) : null;
 
   return (
     <div
