@@ -45,10 +45,15 @@ export async function POST(request: Request) {
   );
 
   const base = whisperSttUrl();
+  const sttHeaders: HeadersInit = {};
+  if (base.includes("ngrok")) {
+    sttHeaders["ngrok-skip-browser-warning"] = "true";
+  }
   let sttResponse: Response;
   try {
     sttResponse = await fetch(`${base}/transcribe`, {
       method: "POST",
+      headers: sttHeaders,
       body: upstream,
       cache: "no-store",
     });
