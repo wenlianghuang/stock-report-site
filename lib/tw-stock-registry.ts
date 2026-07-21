@@ -60,6 +60,40 @@ const SEED_NAME_TO_CODE: Record<string, string> = {
 const TWSE_LISTED_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L";
 const TPEX_OTC_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O";
 
+/**
+ * Spoken / typed short names often drop these endings
+ * (e.g. 萬潤科技 → 萬潤, 台積電 → 台積).
+ * Longer suffixes first so 「半導體」wins over「體」-style accidents.
+ */
+const STRIPPABLE_SUFFIXES = [
+  "半導體",
+  "科技",
+  "工業",
+  "材料",
+  "光電",
+  "建設",
+  "開發",
+  "實業",
+  "電子",
+  "投控",
+  "電",
+  "金",
+  "控",
+] as const;
+
+function addSpokenShortAliases(
+  nameToId: Map<string, string>,
+  normalizedBase: string,
+  stockId: string,
+) {
+  for (const suffix of STRIPPABLE_SUFFIXES) {
+    if (!normalizedBase.endsWith(suffix)) continue;
+    const trimmed = normalizedBase.slice(0, -suffix.length);
+    if (trimmed.length >= 2) addNameVariant(nameToId, trimmed, stockId);
+    break;
+  }
+}
+
 function normalizeName(name: string): string {
   return toTraditionalChinese(name)
     .trim()
@@ -122,13 +156,7 @@ function addRows(
 
     addNameVariant(nameToId, shortName, stockIdRaw);
     addNameVariant(nameToId, fullName, stockIdRaw);
-
-    const normalized = normalizeName(baseName);
-    // help matching "台積" from "台積電"
-    if (normalized.endsWith("電") || normalized.endsWith("金") || normalized.endsWith("控")) {
-      const trimmed = normalized.slice(0, -1);
-      if (trimmed.length >= 2) addNameVariant(nameToId, trimmed, stockIdRaw);
-    }
+    addSpokenShortAliases(nameToId, normalizeName(baseName), stockIdRaw);
   }
 }
 
