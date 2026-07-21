@@ -62,8 +62,9 @@ const TPEX_OTC_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O";
 
 /**
  * Spoken / typed short names often drop these endings
- * (e.g. 萬潤科技 → 萬潤, 台積電 → 台積).
- * Longer suffixes first so 「半導體」wins over「體」-style accidents.
+ * (e.g. 萬潤科技 → 萬潤, 聯亞光電工業 → 聯亞光電 → 聯亞).
+ * Longer suffixes first so 「半導體」wins over accidental short matches.
+ * Aliases are built by peeling repeatedly until no suffix remains.
  */
 const STRIPPABLE_SUFFIXES = [
   "半導體",
@@ -86,11 +87,20 @@ function addSpokenShortAliases(
   normalizedBase: string,
   stockId: string,
 ) {
-  for (const suffix of STRIPPABLE_SUFFIXES) {
-    if (!normalizedBase.endsWith(suffix)) continue;
-    const trimmed = normalizedBase.slice(0, -suffix.length);
-    if (trimmed.length >= 2) addNameVariant(nameToId, trimmed, stockId);
-    break;
+  // Keep peeling suffixes so 「聯亞光電工業」→「聯亞光電」→「聯亞」.
+  let current = normalizedBase;
+  while (current.length >= 2) {
+    let stripped = false;
+    for (const suffix of STRIPPABLE_SUFFIXES) {
+      if (!current.endsWith(suffix)) continue;
+      const trimmed = current.slice(0, -suffix.length);
+      if (trimmed.length < 2) break;
+      addNameVariant(nameToId, trimmed, stockId);
+      current = trimmed;
+      stripped = true;
+      break;
+    }
+    if (!stripped) break;
   }
 }
 

@@ -57,13 +57,14 @@ uv run --extra server --extra ui --extra stock python main.py api
 
 正式站（Vercel）**不需**設定 `STT_API_URL`，會自動使用瀏覽器內建語音辨識（Chrome / Edge / Safari）。
 
-若要用本機 Whisper（品質較好），需本機已建好 [AI_Speech/stt](../AI_Speech/stt)（whisper.cpp + `ggml-medium.bin`，並安裝 `ffmpeg`）：
+若要用本機 Whisper（品質較好），需本機已建好 [AI_Speech/stt](../AI_Speech/stt)（whisper.cpp + `ggml-large-v3-turbo.bin`，並安裝 `ffmpeg`）：
 
 ```bash
 cd ../AI_Speech/stt
+make download-model   # 首次：下載 ggml-large-v3-turbo
 make serve
 # 預設 http://127.0.0.1:8787 ；POST /transcribe、GET /health
-# 服務會帶台股口述 initial prompt；可改用更大的 ggml 模型
+# 服務會帶台股口述 initial prompt
 ```
 
 本機開發在 `.env.local` 設定 `STT_API_URL=http://127.0.0.1:8787`（見 `.env.local.example`）。
