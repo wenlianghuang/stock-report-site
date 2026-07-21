@@ -88,10 +88,10 @@ export async function POST(request: Request) {
     parsed.fields.stockId,
   );
   const warnings = parsed.warnings.filter(
-    (w) => !(stockId && w.includes("聽不到清楚的股號")),
+    (w) => !(stockId && (w.includes("股號") || w.includes("股票"))),
   );
-  if (!stockId && !warnings.some((w) => w.includes("股號"))) {
-    warnings.push("聽不到清楚的股號，請手動確認或改口說四碼代號");
+  if (!stockId && !warnings.some((w) => w.includes("股號") || w.includes("股票"))) {
+    warnings.push("找不到對應的股票，請手動輸入股號或搜尋公司名稱");
   }
 
   return NextResponse.json({

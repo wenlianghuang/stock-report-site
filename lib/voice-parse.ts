@@ -232,7 +232,7 @@ function extractStockId(text: string, warnings: string[]): string {
     return bare[1];
   }
 
-  warnings.push("聽不到清楚的股號，請手動確認或改口說四碼代號");
+  warnings.push("找不到對應的股票，請手動輸入股號或搜尋公司名稱");
   return "";
 }
 

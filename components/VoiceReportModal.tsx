@@ -19,6 +19,11 @@ export type VoicePreviewPayload = {
 
 type VoiceEngine = "whisper" | "browser";
 
+type StockSearchHit = {
+  stockId: string;
+  stockName: string;
+};
+
 type Props = {
   open: boolean;
   disabled?: boolean;
@@ -83,11 +88,18 @@ export function VoiceReportModal({
   const [preview, setPreview] = useState<VoicePreviewPayload | null>(null);
   const [draft, setDraft] = useState<VoiceReportFields | null>(null);
   const [draftStockName, setDraftStockName] = useState<string | null>(null);
+  const [nameQuery, setNameQuery] = useState("");
+  const [searchHits, setSearchHits] = useState<StockSearchHit[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const browserSessionRef = useRef<BrowserSpeechSession | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const nameSearchRef = useRef<HTMLDivElement | null>(null);
+  /** Skip name→search when we just synced name from stockId lookup. */
+  const skipNameSearchRef = useRef(false);
 
   function resetSession() {
     setRecState("idle");
@@ -96,6 +108,10 @@ export function VoiceReportModal({
     setPreview(null);
     setDraft(null);
     setDraftStockName(null);
+    setNameQuery("");
+    setSearchHits([]);
+    setSearchOpen(false);
+    setSearchLoading(false);
     setLiveTranscript("");
     chunksRef.current = [];
   }
@@ -174,6 +190,10 @@ export function VoiceReportModal({
     });
     setDraft({ ...payload.fields });
     setDraftStockName(payload.stockName ?? null);
+    skipNameSearchRef.current = true;
+    setNameQuery(payload.stockName ?? "");
+    setSearchHits([]);
+    setSearchOpen(false);
     setStep("confirm");
   }
 
@@ -193,8 +213,14 @@ export function VoiceReportModal({
         );
         if (!response.ok) return;
         const payload = (await response.json()) as { stockName?: string | null };
-        if (!cancelled) {
-          setDraftStockName(payload.stockName ?? null);
+        if (cancelled) return;
+        const name = payload.stockName ?? null;
+        setDraftStockName(name);
+        if (name) {
+          skipNameSearchRef.current = true;
+          setNameQuery(name);
+          setSearchHits([]);
+          setSearchOpen(false);
         }
       } catch {
         // ignore lookup failure in UI
@@ -204,6 +230,70 @@ export function VoiceReportModal({
       cancelled = true;
     };
   }, [draft?.stockId]);
+
+  useEffect(() => {
+    if (step !== "confirm") return;
+    if (skipNameSearchRef.current) {
+      skipNameSearchRef.current = false;
+      return;
+    }
+    const q = nameQuery.trim();
+    if (q.length < 1) {
+      setSearchHits([]);
+      setSearchOpen(false);
+      return;
+    }
+    // Already matched this exact company name — no need to search.
+    if (draftStockName && q === draftStockName) {
+      setSearchHits([]);
+      setSearchOpen(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setSearchLoading(true);
+        try {
+          const response = await fetch(
+            `/api/voice/stock-search?q=${encodeURIComponent(q)}`,
+            { cache: "no-store" },
+          );
+          if (!response.ok) return;
+          const payload = (await response.json()) as {
+            results?: StockSearchHit[];
+          };
+          if (cancelled) return;
+          const results = payload.results ?? [];
+          setSearchHits(results);
+          setSearchOpen(results.length > 0);
+        } catch {
+          if (!cancelled) {
+            setSearchHits([]);
+            setSearchOpen(false);
+          }
+        } finally {
+          if (!cancelled) setSearchLoading(false);
+        }
+      })();
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [nameQuery, draftStockName, step]);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!nameSearchRef.current?.contains(event.target as Node)) {
+        setSearchOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [searchOpen]);
 
   async function startBrowserListening() {
     setError("");
@@ -351,6 +441,15 @@ export function VoiceReportModal({
     setDraft((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
+  function selectSearchHit(hit: StockSearchHit) {
+    skipNameSearchRef.current = true;
+    setDraftStockName(hit.stockName);
+    setNameQuery(hit.stockName);
+    setSearchHits([]);
+    setSearchOpen(false);
+    updateDraft("stockId", hit.stockId);
+  }
+
   function handleRetry() {
     resetSession();
   }
@@ -378,7 +477,7 @@ export function VoiceReportModal({
               語音填寫
             </h2>
             <p className="mt-1 text-xs text-zinc-500">
-              請口述股號與持股資訊，辨識後請確認是否正確。
+              請口述股號或公司名稱與持股資訊，辨識後請確認是否正確。
               {engineLabel ? (
                 <span className="mt-0.5 block text-zinc-400">
                   辨識引擎：{engineLabel}
@@ -405,6 +504,9 @@ export function VoiceReportModal({
               </p>
               <p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
                 範例：「分析二三零三，持股兩千股，均價五十」或「幫我看聯電，沒有持股」
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                若公司名辨識錯誤，確認畫面可改股號，或搜尋正確公司名稱。
               </p>
               {isBrowserMode ? (
                 <p className="mt-2 text-xs text-zinc-500">
@@ -473,19 +575,76 @@ export function VoiceReportModal({
               </p>
               <dl className="grid gap-2 text-sm">
                 <div className="flex justify-between gap-4">
-                  <dt className="text-zinc-500">股號</dt>
+                  <dt className="shrink-0 text-zinc-500">股號</dt>
                   <dd>
                     <input
                       value={draft.stockId}
                       onChange={(e) => updateDraft("stockId", e.target.value)}
+                      placeholder="例如 3305"
                       className="w-24 rounded border border-zinc-300 bg-white px-2 py-1 text-right text-sm dark:border-zinc-600 dark:bg-black"
                     />
                   </dd>
                 </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="text-zinc-500">公司名稱</dt>
-                  <dd className="text-zinc-700 dark:text-zinc-200">
-                    {draftStockName ?? "（未對到公司，請再確認股號）"}
+                <div className="flex items-start justify-between gap-4">
+                  <dt className="shrink-0 pt-1.5 text-zinc-500">公司名稱</dt>
+                  <dd className="min-w-0 flex-1">
+                    <div ref={nameSearchRef} className="relative">
+                      <input
+                        value={nameQuery}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          setNameQuery(next);
+                          setDraftStockName(null);
+                          // Editing the name invalidates the previous ticker until user re-selects.
+                          if (draft.stockId) {
+                            updateDraft("stockId", "");
+                          }
+                        }}
+                        onFocus={() => {
+                          if (searchHits.length > 0) setSearchOpen(true);
+                        }}
+                        placeholder="搜尋公司名稱，例如 昇貿"
+                        autoComplete="off"
+                        className="w-full rounded border border-zinc-300 bg-white px-2 py-1 text-right text-sm dark:border-zinc-600 dark:bg-black"
+                        aria-autocomplete="list"
+                        aria-expanded={searchOpen}
+                      />
+                      {searchLoading ? (
+                        <p className="mt-1 text-right text-[11px] text-zinc-400">
+                          搜尋中…
+                        </p>
+                      ) : null}
+                      {!draftStockName && !searchLoading ? (
+                        <p className="mt-1 text-right text-[11px] text-amber-700 dark:text-amber-400">
+                          {nameQuery.trim()
+                            ? "未對到公司，請輸入股號或從下方選取"
+                            : "可輸入股號，或搜尋公司名稱"}
+                        </p>
+                      ) : null}
+                      {searchOpen && searchHits.length > 0 ? (
+                        <ul
+                          role="listbox"
+                          className="absolute right-0 z-10 mt-1 max-h-48 w-full min-w-[12rem] overflow-auto rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+                        >
+                          {searchHits.map((hit) => (
+                            <li key={hit.stockId} role="option">
+                              <button
+                                type="button"
+                                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                onClick={() => selectSearchHit(hit)}
+                              >
+                                <span className="truncate text-zinc-800 dark:text-zinc-100">
+                                  {hit.stockName}
+                                </span>
+                                <span className="shrink-0 font-mono text-xs text-zinc-500">
+                                  {hit.stockId}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">

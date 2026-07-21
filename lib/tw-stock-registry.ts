@@ -190,6 +190,61 @@ export async function resolveStockIdFromText(text: string): Promise<string | nul
   return null;
 }
 
+export type StockSearchHit = {
+  stockId: string;
+  stockName: string;
+};
+
+/**
+ * Autocomplete against TWSE/TPEx registry by company name or stock-id prefix.
+ * Returns unique tickers with canonical short names.
+ */
+export async function searchStocksByQuery(
+  rawQuery: string,
+  limit = 8,
+): Promise<StockSearchHit[]> {
+  const query = normalizeName(rawQuery);
+  if (!query || limit <= 0) return [];
+
+  const registry = await getRegistry();
+
+  if (/^\d{1,6}$/.test(query)) {
+    const hits: StockSearchHit[] = [];
+    for (const [stockId, stockName] of registry.idToName) {
+      if (!stockId.startsWith(query)) continue;
+      hits.push({ stockId, stockName });
+    }
+    return hits
+      .sort((a, b) => a.stockId.localeCompare(b.stockId))
+      .slice(0, limit);
+  }
+
+  const scored = new Map<string, { stockName: string; score: number }>();
+  for (const [name, stockId] of registry.sortedNameToId) {
+    let score = -1;
+    if (name === query) score = 300;
+    else if (name.startsWith(query)) score = 200 + Math.min(name.length, 20);
+    else if (name.includes(query)) score = 100;
+    else continue;
+
+    const canonical = registry.idToName.get(stockId) ?? name;
+    const prev = scored.get(stockId);
+    if (!prev || score > prev.score) {
+      scored.set(stockId, { stockName: canonical, score });
+    }
+  }
+
+  return Array.from(scored.entries())
+    .sort(
+      (a, b) =>
+        b[1].score - a[1].score ||
+        a[1].stockName.localeCompare(b[1].stockName, "zh-Hant") ||
+        a[0].localeCompare(b[0]),
+    )
+    .slice(0, limit)
+    .map(([stockId, { stockName }]) => ({ stockId, stockName }));
+}
+
 /**
  * Merge parser digit ticker + company-name match.
  * Valid market codes win; otherwise fall back to name (fixes 85000-as-ticker).
