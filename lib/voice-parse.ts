@@ -65,6 +65,9 @@ const UNIT_VALUE: Record<string, number> = {
   萬: 10000,
 };
 
+const QTY_TOKEN =
+  "[0-9零〇○一二兩两三四五六七八九十百千萬万點点.]+";
+
 function normalizeText(raw: string): string {
   // Whisper zh often emits Simplified; normalize to Traditional for TW matching.
   return toTraditionalChinese(raw)
@@ -164,6 +167,41 @@ export function parseChineseQuantity(raw: string): number | null {
   return Number.isFinite(total) ? total : null;
 }
 
+/** Remove quantity phrases that should not be mistaken for tickers. */
+function stripQuantityPhrases(text: string): string {
+  return (
+    text
+      // Share count immediately before cost — must run before stripping 均價 itself
+      .replace(
+        new RegExp(
+          `${QTY_TOKEN}(?=平均價|均价|均價|(?<![股])價)`,
+          "g",
+        ),
+        "",
+      )
+      .replace(
+        new RegExp(`(?:持股|持有|股数|股數)\\s*${QTY_TOKEN}\\s*股?`, "g"),
+        "",
+      )
+      .replace(
+        new RegExp(
+          `(?:平均價|均价|均價|成本|成本价|成本價|每股)\\s*${QTY_TOKEN}\\s*(?:元|块|塊)?`,
+          "g",
+        ),
+        "",
+      )
+      // STT often drops 均: 價19塊 / 价19元
+      .replace(new RegExp(`(?<![股])價\\s*${QTY_TOKEN}\\s*(?:元|块|塊)?`, "g"), "")
+      .replace(
+        new RegExp(
+          `[0-9零〇○一二兩两三四五六七八九十百千萬万]+\\s*股(?!票|號|号)`,
+          "g",
+        ),
+        "",
+      )
+  );
+}
+
 function extractStockId(text: string, warnings: string[]): string {
   const labeled = text.match(
     /(?:股號|代号|代號|股票代號|分析|看看|查看)\s*(\d{4,6})/,
@@ -181,17 +219,13 @@ function extractStockId(text: string, warnings: string[]): string {
     if (/^\d{4,6}$/.test(id)) return id;
   }
 
-  // Strip holding/cost quantities so "持股2000" is not mistaken for a ticker
-  const stripped = text
-    .replace(
-      /(?:持股|持有|股数|股數)\s*[0-9零〇○一二兩两三四五六七八九十百千萬万點点.]+/g,
-      "",
-    )
-    .replace(
-      /(?:均价|均價|成本|成本价|成本價|每股)\s*[0-9零〇○一二兩两三四五六七八九十百千萬万點点.]+/g,
-      "",
-    )
-    .replace(/[0-9零〇○一二兩两三四五六七八九十百千萬万]+\s*股(?!票|號|号)/g, "");
+  const stripped = stripQuantityPhrases(text);
+
+  // Prefer 4-digit tickers (typical TW listed codes) over 5–6 digit share counts.
+  const four = stripped.match(/(?<!\d)(\d{4})(?!\d)/);
+  if (four?.[1]) {
+    return four[1];
+  }
 
   const bare = stripped.match(/(\d{4,6})/);
   if (bare?.[1]) {
@@ -217,8 +251,10 @@ function extractHolding(
   let avgCost = "";
 
   const sharePatterns = [
-    /(?:持股|持有|股数|股數)\s*([0-9零〇○一二兩两三四五六七八九十百千萬万點点]+)\s*股?/,
-    /([0-9零〇○一二兩两三四五六七八九十百千萬万]+)\s*股(?!票|號|价|價)/,
+    new RegExp(`(?:持股|持有|股数|股數)\\s*(${QTY_TOKEN})\\s*股?`),
+    // 85000平均價 / 八萬均價（STT 常省略「股」）
+    new RegExp(`(${QTY_TOKEN})(?=平均價|均价|均價|(?<![股])價)`),
+    new RegExp(`([0-9零〇○一二兩两三四五六七八九十百千萬万]+)\\s*股(?!票|號|价|價)`),
   ];
   for (const re of sharePatterns) {
     const m = text.match(re);
@@ -232,8 +268,10 @@ function extractHolding(
   }
 
   const costPatterns = [
-    /(?:均价|均價|成本|成本价|成本價)\s*([0-9零〇○一二兩两三四五六七八九十百千萬万點点.]+)/,
-    /每股\s*([0-9零〇○一二兩两三四五六七八九十百千萬万點点.]+)\s*(?:元|块|塊)?/,
+    new RegExp(`(?:平均價|均价|均價|成本|成本价|成本價)\\s*(${QTY_TOKEN})`),
+    new RegExp(`每股\\s*(${QTY_TOKEN})\\s*(?:元|块|塊)?`),
+    // STT drops 均: 價19塊
+    new RegExp(`(?<![股])價\\s*(${QTY_TOKEN})\\s*(?:元|块|塊)?`),
   ];
   for (const re of costPatterns) {
     const m = text.match(re);

@@ -36,6 +36,13 @@ const SEED_NAME_TO_CODE: Record<string, string> = {
   日月光: "3711",
   中钢: "2002",
   中鋼: "2002",
+  // Common STT near-misses for 中鋼
+  隔剛: "2002",
+  隔刚: "2002",
+  忠鋼: "2002",
+  忠钢: "2002",
+  富采: "3714",
+  富採: "3714",
   台塑: "1301",
   南亚: "1303",
   南亞: "1303",
@@ -181,5 +188,25 @@ export async function resolveStockIdFromText(text: string): Promise<string | nul
     if (query.includes(name)) return stockId;
   }
   return null;
+}
+
+/**
+ * Merge parser digit ticker + company-name match.
+ * Valid market codes win; otherwise fall back to name (fixes 85000-as-ticker).
+ */
+export async function resolveVoiceStockId(
+  text: string,
+  parsedStockId: string,
+): Promise<{ stockId: string; stockName: string | null }> {
+  const digitRaw = parsedStockId.trim();
+  const digitValid =
+    /^\d{4,6}$/.test(digitRaw) && (await resolveStockNameById(digitRaw))
+      ? digitRaw
+      : "";
+  const fromName = (await resolveStockIdFromText(text)) ?? "";
+
+  const stockId = digitValid || fromName;
+  const stockName = stockId ? await resolveStockNameById(stockId) : null;
+  return { stockId, stockName };
 }
 

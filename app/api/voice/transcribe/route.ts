@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { parseVoiceReportCommand } from "@/lib/voice-parse";
 import { resolveVoiceEngine, whisperSttUrl } from "@/lib/voice-config";
-import {
-  resolveStockIdFromText,
-  resolveStockNameById,
-} from "@/lib/tw-stock-registry";
+import { resolveVoiceStockId } from "@/lib/tw-stock-registry";
 import { toTraditionalChinese } from "@/lib/zh-convert";
 import { collapseRepeatedSpeechFragments } from "@/lib/speech-cleanup";
 
@@ -86,11 +83,16 @@ export async function POST(request: Request) {
   // Whisper `zh` often emits Simplified; match/display as Traditional.
   const text = collapseRepeatedSpeechFragments(toTraditionalChinese(rawText));
   const parsed = parseVoiceReportCommand(text);
-  let stockId = parsed.fields.stockId;
-  if (!stockId) {
-    stockId = (await resolveStockIdFromText(text)) ?? "";
+  const { stockId, stockName } = await resolveVoiceStockId(
+    text,
+    parsed.fields.stockId,
+  );
+  const warnings = parsed.warnings.filter(
+    (w) => !(stockId && w.includes("聽不到清楚的股號")),
+  );
+  if (!stockId && !warnings.some((w) => w.includes("股號"))) {
+    warnings.push("聽不到清楚的股號，請手動確認或改口說四碼代號");
   }
-  const stockName = stockId ? await resolveStockNameById(stockId) : null;
 
   return NextResponse.json({
     text,
@@ -101,7 +103,7 @@ export async function POST(request: Request) {
       stockId,
     },
     stockName,
-    warnings: parsed.warnings,
+    warnings,
     canConfirm: /^\d{4,6}$/.test(stockId),
     engine: "whisper",
   });

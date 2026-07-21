@@ -63,6 +63,7 @@ uv run --extra server --extra ui --extra stock python main.py api
 cd ../AI_Speech/stt
 make serve
 # 預設 http://127.0.0.1:8787 ；POST /transcribe、GET /health
+# 服務會帶台股口述 initial prompt；可改用更大的 ggml 模型
 ```
 
 本機開發在 `.env.local` 設定 `STT_API_URL=http://127.0.0.1:8787`（見 `.env.local.example`）。
