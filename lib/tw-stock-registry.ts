@@ -1,5 +1,5 @@
 import { toTraditionalChinese } from "@/lib/zh-convert";
-import { bestWindowScore, scoreNameSimilarity } from "@/lib/stock-name-fuzzy";
+import { bestWindowScore, scoreNameSimilarity, MIN_AUTO_FILL_SCORE } from "@/lib/stock-name-fuzzy";
 
 type RegistryData = {
   idToName: Map<string, string>;
@@ -363,7 +363,8 @@ export async function searchStocksByQuery(
 /**
  * Merge parser digit ticker + company-name match.
  * Valid market codes win; otherwise fall back to name (fixes 85000-as-ticker).
- * Near-miss STT (上全→上詮, 身貌→昇貿) uses char/pinyin fuzzy when unique.
+ * Near-miss STT uses combined char+pinyin score; auto-fills the single best
+ * hit when score is confident enough (see MIN_AUTO_FILL_SCORE).
  */
 export async function resolveVoiceStockId(
   text: string,
@@ -391,17 +392,16 @@ export async function resolveVoiceStockId(
     const fuzzy = collectFuzzyFromQuery(query, registry);
     if (fuzzy.length > 0) {
       const best = fuzzy[0]!;
-      const top = fuzzy.filter((f) => f.score === best.score);
-      const uniqueIds = new Set(top.map((f) => f.stockId));
-      if (uniqueIds.size === 1) {
+      nameHint = best.window;
+      if (best.score >= MIN_AUTO_FILL_SCORE) {
+        // Always take the single highest-scoring near-match.
         stockId = best.stockId;
-        nameHint = best.window;
       } else {
-        fuzzyCandidates = top.slice(0, 8).map((f) => ({
+        // Weak ties (e.g. 順元↔東元/鼎元): let user confirm from list.
+        fuzzyCandidates = fuzzy.slice(0, 8).map((f) => ({
           stockId: f.stockId,
           stockName: f.stockName,
         }));
-        nameHint = best.window;
       }
     }
   }

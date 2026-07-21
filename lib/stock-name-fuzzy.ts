@@ -46,56 +46,63 @@ export function editDistance(a: string, b: string): number {
 export type FuzzyHit = {
   stockId: string;
   matchedName: string;
-  /** Higher is better. */
+  /** Higher is better. Combines character + pinyin distance. */
   score: number;
   kind: "char" | "pinyin";
 };
 
 /**
+ * Minimum score to auto-fill a near-match.
+ * Homophones / 1-char+same-pinyin land well above this;
+ * 「順元↔東元」(same 元, unrelated first syllable) stay below.
+ */
+export const MIN_AUTO_FILL_SCORE = 130;
+
+/**
  * Score query fragment vs registry name.
- * char distance ≤1 → strong; tone-less pinyin equal / distance ≤1 → phonetic.
+ * Prefers same/near pinyin over "only share one character".
+ *
+ * Examples (approx):
+ * - 上全/上詮 (char1, py0) → high
+ * - 鼎元/頂元 (char1, py0) → high
+ * - 身貌/昇貿 (char2, py1) → mid-high, still auto-fill
+ * - 順元/東元 (char1, py far) → low, do not auto-fill
  */
 export function scoreNameSimilarity(query: string, name: string): FuzzyHit | null {
   if (!query || !name) return null;
   if (query === name) return null; // exact handled elsewhere
 
   const lenDiff = Math.abs(query.length - name.length);
-  if (lenDiff <= 1 && query.length >= 2 && name.length >= 2) {
-    const d = editDistance(query, name);
-    if (d === 1) {
-      return {
-        stockId: "",
-        matchedName: name,
-        score: 80,
-        kind: "char",
-      };
-    }
-  }
-
-  // Only bother with pinyin when lengths are close (STT same syllable count).
   if (lenDiff > 1) return null;
   if (query.length < 2 || name.length < 2) return null;
+
+  const charD = editDistance(query, name);
+  if (charD > 2) return null;
 
   const pq = pinyinKey(query);
   const pn = pinyinKey(name);
   if (!pq || !pn) return null;
-  if (pq === pn) {
-    return {
-      stockId: "",
-      matchedName: name,
-      score: 70,
-      kind: "pinyin",
-    };
-  }
-  if (Math.abs(pq.length - pn.length) <= 2 && editDistance(pq, pn) <= 1) {
-    return {
-      stockId: "",
-      matchedName: name,
-      score: 55,
-      kind: "pinyin",
-    };
-  }
-  return null;
+
+  const pyD = editDistance(pq, pn);
+
+  // Must be near in characters OR near in sound.
+  if (charD > 1 && pyD > 1) return null;
+
+  // Heavier penalty on pinyin so 鼎元/頂元 outranks 順元/東元.
+  let score = 200 - charD * 30 - pyD * 15;
+  if (query.length === name.length) score += 5;
+  if (pyD === 0) score += 40;
+  else if (pyD === 1) score += 10;
+
+  const kind: "char" | "pinyin" =
+    pyD === 0 || (charD > 1 && pyD <= 1) ? "pinyin" : "char";
+
+  return {
+    stockId: "",
+    matchedName: name,
+    score,
+    kind,
+  };
 }
 
 /**
