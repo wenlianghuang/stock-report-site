@@ -30,7 +30,10 @@ type Props = {
   open: boolean;
   disabled?: boolean;
   onClose: () => void;
-  onConfirm: (fields: VoiceReportFields) => void;
+  /** 確認後直接建立報告並開始分析 */
+  onConfirmAndAnalyze: (fields: VoiceReportFields) => void | Promise<void>;
+  /** 只填入表單，不送出分析 */
+  onFillForm: (fields: VoiceReportFields) => void;
 };
 
 type RecState = "idle" | "recording" | "uploading";
@@ -80,7 +83,8 @@ export function VoiceReportModal({
   open,
   disabled,
   onClose,
-  onConfirm,
+  onConfirmAndAnalyze,
+  onFillForm,
 }: Props) {
   const [engine, setEngine] = useState<VoiceEngine>("browser");
   const [engineLabel, setEngineLabel] = useState("");
@@ -726,10 +730,18 @@ export function VoiceReportModal({
               <button
                 type="button"
                 disabled={!draftReady(draft) || disabled}
-                onClick={() => onConfirm(draft)}
+                onClick={() => void onConfirmAndAnalyze(draft)}
                 className="flex-1 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
               >
-                正確，填入表單
+                確認並開始分析
+              </button>
+              <button
+                type="button"
+                disabled={!draftReady(draft) || disabled}
+                onClick={() => onFillForm(draft)}
+                className="rounded-lg border border-zinc-300 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-900"
+              >
+                只填入表單
               </button>
               <button
                 type="button"

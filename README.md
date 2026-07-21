@@ -71,7 +71,7 @@ make serve
 
 若將 Whisper 部署到有公網 URL 的機器，在 Vercel 設定 `STT_API_URL=https://stt.yourdomain.com` 即可切回伺服器辨識。
 
-Dashboard「語音填寫」：錄音 → 辨識 → 預覽／微調 →「確認並開始分析」或「只填入表單」。不會在未確認時自動送出。
+Dashboard「語音填寫」：錄音 → 辨識 → 預覽／微調 →「確認並開始分析」（直接跑 pipeline）或「只填入表單」。不會在未確認時自動送出。
 
 ### 4. 啟動網站
 

@@ -262,7 +262,6 @@ export function TwStockDashboard() {
     setShareCount(fields.isHolding ? fields.shareCount : "");
     setAvgCost(fields.isHolding ? fields.avgCost : "");
     setHoldingLoadedFor(fields.stockId.trim() || null);
-    setSentNotice("已從語音填入，請確認欄位後再按「開始分析」");
   }
 
   function closeVoiceModal() {
@@ -279,9 +278,22 @@ export function TwStockDashboard() {
     }
   }
 
-  function handleVoiceConfirm(fields: VoiceReportFields) {
+  function handleVoiceFillForm(fields: VoiceReportFields) {
     applyVoiceFields(fields);
+    setSentNotice("已從語音填入，請確認欄位後再按「開始分析」");
     closeVoiceModal();
+  }
+
+  async function handleVoiceConfirmAndAnalyze(fields: VoiceReportFields) {
+    applyVoiceFields(fields);
+    setSentNotice("");
+    closeVoiceModal();
+    await createReportFromFields({
+      stockId: fields.stockId.trim(),
+      isHolding: fields.isHolding,
+      shareCount: fields.isHolding ? fields.shareCount : "",
+      avgCost: fields.isHolding ? fields.avgCost : "",
+    });
   }
 
   async function createReportFromFields(fields: {
@@ -428,7 +440,8 @@ export function TwStockDashboard() {
           open={voiceModalOpen}
           disabled={loading}
           onClose={closeVoiceModal}
-          onConfirm={handleVoiceConfirm}
+          onConfirmAndAnalyze={handleVoiceConfirmAndAnalyze}
+          onFillForm={handleVoiceFillForm}
         />
 
         <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3">
