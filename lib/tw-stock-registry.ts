@@ -1,4 +1,5 @@
 import { toTraditionalChinese } from "@/lib/zh-convert";
+import { bestWindowScore, scoreNameSimilarity } from "@/lib/stock-name-fuzzy";
 
 type RegistryData = {
   idToName: Map<string, string>;
@@ -233,9 +234,79 @@ export type StockSearchHit = {
   stockName: string;
 };
 
+function collectFuzzyFromQuery(
+  query: string,
+  registry: RegistryData,
+): Array<{ stockId: string; stockName: string; score: number; window: string }> {
+  const byId = new Map<
+    string,
+    { stockName: string; score: number; window: string }
+  >();
+
+  for (const [name, stockId] of registry.sortedNameToId) {
+    if (name.length < 2 || name.length > 8) continue;
+    const win = bestWindowScore(query, name);
+    if (!win) continue;
+    const canonical = registry.idToName.get(stockId) ?? name;
+    const prev = byId.get(stockId);
+    if (!prev || win.score > prev.score) {
+      byId.set(stockId, {
+        stockName: canonical,
+        score: win.score,
+        window: win.window,
+      });
+    }
+  }
+
+  return Array.from(byId.entries())
+    .map(([stockId, v]) => ({ stockId, ...v }))
+    .sort((a, b) => b.score - a.score || a.stockName.localeCompare(b.stockName, "zh-Hant"));
+}
+
+function collectFuzzyFromTypedName(
+  query: string,
+  registry: RegistryData,
+): Array<{ stockId: string; stockName: string; score: number }> {
+  const byId = new Map<string, { stockName: string; score: number }>();
+
+  // Prefer scoring against canonical short names + short aliases.
+  for (const [name, stockId] of registry.sortedNameToId) {
+    if (name.length < 2 || name.length > 8) continue;
+    const hit = scoreNameSimilarity(query, name);
+    if (!hit) continue;
+    const canonical = registry.idToName.get(stockId) ?? name;
+    const prev = byId.get(stockId);
+    if (!prev || hit.score > prev.score) {
+      byId.set(stockId, { stockName: canonical, score: hit.score });
+    }
+  }
+
+  return Array.from(byId.entries())
+    .map(([stockId, v]) => ({ stockId, ...v }))
+    .sort((a, b) => b.score - a.score || a.stockName.localeCompare(b.stockName, "zh-Hant"));
+}
+
+/** Pull a short CJK guess from voice text when nothing matched (for search prefill). */
+export function extractVoiceNameHint(text: string): string | null {
+  let s = normalizeName(text);
+  if (!s) return null;
+  s = s
+    .replace(/(?:没有|沒有|无|無|不|未)持股/g, "")
+    .replace(/(?:持股|持有|股数|股數)[0-9零〇○一二兩两三四五六七八九十百千萬万點点.]*股?/g, "")
+    .replace(/(?:平均價|均价|均價|成本|成本价|成本價|價)[0-9零〇○一二兩两三四五六七八九十百千萬万點点.]+(?:元|块|塊)?/g, "")
+    .replace(/[0-9零〇○一二兩两三四五六七八九十百千萬万]+股(?!票|號|号)/g, "")
+    .replace(/(?:幫我|帮我)?(?:分析|看看|查看|我有|有)/g, "");
+
+  const tokens = s.match(/[\u4e00-\u9fff]{2,6}/g) ?? [];
+  if (!tokens.length) return null;
+  // Prefer shorter brand-like tokens (2–3 chars).
+  tokens.sort((a, b) => a.length - b.length || b.localeCompare(a, "zh-Hant"));
+  return tokens[0] ?? null;
+}
+
 /**
  * Autocomplete against TWSE/TPEx registry by company name or stock-id prefix.
- * Returns unique tickers with canonical short names.
+ * Falls back to char / pinyin near-match when literal search is empty.
  */
 export async function searchStocksByQuery(
   rawQuery: string,
@@ -272,6 +343,12 @@ export async function searchStocksByQuery(
     }
   }
 
+  if (scored.size === 0) {
+    for (const hit of collectFuzzyFromTypedName(query, registry)) {
+      scored.set(hit.stockId, { stockName: hit.stockName, score: hit.score });
+    }
+  }
+
   return Array.from(scored.entries())
     .sort(
       (a, b) =>
@@ -286,11 +363,17 @@ export async function searchStocksByQuery(
 /**
  * Merge parser digit ticker + company-name match.
  * Valid market codes win; otherwise fall back to name (fixes 85000-as-ticker).
+ * Near-miss STT (上全→上詮, 身貌→昇貿) uses char/pinyin fuzzy when unique.
  */
 export async function resolveVoiceStockId(
   text: string,
   parsedStockId: string,
-): Promise<{ stockId: string; stockName: string | null }> {
+): Promise<{
+  stockId: string;
+  stockName: string | null;
+  nameHint: string | null;
+  fuzzyCandidates: StockSearchHit[];
+}> {
   const digitRaw = parsedStockId.trim();
   const digitValid =
     /^\d{4,6}$/.test(digitRaw) && (await resolveStockNameById(digitRaw))
@@ -298,8 +381,36 @@ export async function resolveVoiceStockId(
       : "";
   const fromName = (await resolveStockIdFromText(text)) ?? "";
 
-  const stockId = digitValid || fromName;
+  let stockId = digitValid || fromName;
+  let fuzzyCandidates: StockSearchHit[] = [];
+  let nameHint: string | null = null;
+
+  if (!stockId) {
+    const registry = await getRegistry();
+    const query = normalizeName(text);
+    const fuzzy = collectFuzzyFromQuery(query, registry);
+    if (fuzzy.length > 0) {
+      const best = fuzzy[0]!;
+      const top = fuzzy.filter((f) => f.score === best.score);
+      const uniqueIds = new Set(top.map((f) => f.stockId));
+      if (uniqueIds.size === 1) {
+        stockId = best.stockId;
+        nameHint = best.window;
+      } else {
+        fuzzyCandidates = top.slice(0, 8).map((f) => ({
+          stockId: f.stockId,
+          stockName: f.stockName,
+        }));
+        nameHint = best.window;
+      }
+    }
+  }
+
+  if (!stockId && !nameHint) {
+    nameHint = extractVoiceNameHint(text);
+  }
+
   const stockName = stockId ? await resolveStockNameById(stockId) : null;
-  return { stockId, stockName };
+  return { stockId, stockName, nameHint, fuzzyCandidates };
 }
 

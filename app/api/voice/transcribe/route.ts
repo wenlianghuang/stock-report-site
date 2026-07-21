@@ -83,15 +83,17 @@ export async function POST(request: Request) {
   // Whisper `zh` often emits Simplified; match/display as Traditional.
   const text = collapseRepeatedSpeechFragments(toTraditionalChinese(rawText));
   const parsed = parseVoiceReportCommand(text);
-  const { stockId, stockName } = await resolveVoiceStockId(
-    text,
-    parsed.fields.stockId,
-  );
+  const { stockId, stockName, nameHint, fuzzyCandidates } =
+    await resolveVoiceStockId(text, parsed.fields.stockId);
   const warnings = parsed.warnings.filter(
     (w) => !(stockId && (w.includes("股號") || w.includes("股票"))),
   );
   if (!stockId && !warnings.some((w) => w.includes("股號") || w.includes("股票"))) {
-    warnings.push("找不到對應的股票，請手動輸入股號或搜尋公司名稱");
+    warnings.push(
+      fuzzyCandidates.length > 0
+        ? "找到相近公司名稱，請從下方選取確認"
+        : "找不到對應的股票，請手動輸入股號或搜尋公司名稱",
+    );
   }
 
   return NextResponse.json({
@@ -103,6 +105,8 @@ export async function POST(request: Request) {
       stockId,
     },
     stockName,
+    nameHint,
+    fuzzyCandidates,
     warnings,
     canConfirm: /^\d{4,6}$/.test(stockId),
     engine: "whisper",

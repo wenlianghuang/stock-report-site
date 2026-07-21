@@ -8,21 +8,23 @@ import {
 } from "@/lib/browser-speech";
 import type { VoiceReportFields } from "@/lib/voice-parse";
 
+type StockSearchHit = {
+  stockId: string;
+  stockName: string;
+};
+
 export type VoicePreviewPayload = {
   text: string;
   fields: VoiceReportFields;
   stockName?: string | null;
+  nameHint?: string | null;
+  fuzzyCandidates?: StockSearchHit[];
   warnings: string[];
   canConfirm: boolean;
   engine?: string;
 };
 
 type VoiceEngine = "whisper" | "browser";
-
-type StockSearchHit = {
-  stockId: string;
-  stockName: string;
-};
 
 type Props = {
   open: boolean;
@@ -180,20 +182,43 @@ export function VoiceReportModal({
   }
 
   function showPreview(payload: VoicePreviewPayload) {
+    const candidates = payload.fuzzyCandidates ?? [];
     setPreview({
       text: payload.text,
       fields: payload.fields,
       stockName: payload.stockName ?? null,
+      nameHint: payload.nameHint ?? null,
+      fuzzyCandidates: candidates,
       warnings: payload.warnings ?? [],
       canConfirm: payload.canConfirm,
       engine: payload.engine,
     });
     setDraft({ ...payload.fields });
     setDraftStockName(payload.stockName ?? null);
-    skipNameSearchRef.current = true;
-    setNameQuery(payload.stockName ?? "");
-    setSearchHits([]);
-    setSearchOpen(false);
+
+    if (payload.stockName) {
+      skipNameSearchRef.current = true;
+      setNameQuery(payload.stockName);
+      setSearchHits([]);
+      setSearchOpen(false);
+    } else if (candidates.length > 0) {
+      // Ambiguous near-matches: show them immediately for confirmation.
+      skipNameSearchRef.current = true;
+      setNameQuery(payload.nameHint ?? "");
+      setSearchHits(candidates);
+      setSearchOpen(true);
+    } else if (payload.nameHint) {
+      // Prefill STT fragment so char/pinyin search can surface suggestions.
+      skipNameSearchRef.current = false;
+      setNameQuery(payload.nameHint);
+      setSearchHits([]);
+      setSearchOpen(false);
+    } else {
+      skipNameSearchRef.current = true;
+      setNameQuery("");
+      setSearchHits([]);
+      setSearchOpen(false);
+    }
     setStep("confirm");
   }
 
