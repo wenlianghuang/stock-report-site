@@ -5,6 +5,7 @@ export type VoiceReportFields = {
   isHolding: boolean;
   shareCount: string;
   avgCost: string;
+  usesMargin: boolean;
 };
 
 export type VoiceParseResult = {
@@ -238,13 +239,19 @@ function extractStockId(text: string, warnings: string[]): string {
 
 function extractHolding(
   text: string,
-): Pick<VoiceReportFields, "isHolding" | "shareCount" | "avgCost"> & {
+): Pick<VoiceReportFields, "isHolding" | "shareCount" | "avgCost" | "usesMargin"> & {
   notes: string[];
 } {
   const notes: string[] = [];
   const noHolding = /没有持股|沒有持股|无持股|無持股|不持股|未持股/.test(text);
   if (noHolding) {
-    return { isHolding: false, shareCount: "", avgCost: "", notes };
+    return {
+      isHolding: false,
+      shareCount: "",
+      avgCost: "",
+      usesMargin: false,
+      notes,
+    };
   }
 
   let shareCount = "";
@@ -291,10 +298,20 @@ function extractHolding(
     notes.push("有提到持股，但股數或均價不完整，請補齊後再送出");
   }
 
+  const noMargin = /没有融资|沒有融資|无融资|無融資|现股|現股|现金持股|現金持股/.test(
+    text,
+  );
+  const usesMargin =
+    !noMargin &&
+    /使用融资|使用融資|有融资|有融資|融资买|融資買|融资持股|融資持股|融资|融資/.test(
+      text,
+    );
+
   return {
     isHolding: mentionsHolding,
     shareCount,
     avgCost,
+    usesMargin: mentionsHolding && usesMargin,
     notes,
   };
 }
@@ -306,7 +323,13 @@ export function parseVoiceReportCommand(transcript: string): VoiceParseResult {
 
   if (!text) {
     return {
-      fields: { stockId: "", isHolding: false, shareCount: "", avgCost: "" },
+      fields: {
+        stockId: "",
+        isHolding: false,
+        shareCount: "",
+        avgCost: "",
+        usesMargin: false,
+      },
       warnings: ["沒有辨識到內容，請再試一次"],
       canConfirm: false,
     };
@@ -321,6 +344,7 @@ export function parseVoiceReportCommand(transcript: string): VoiceParseResult {
     isHolding: holding.isHolding,
     shareCount: holding.shareCount,
     avgCost: holding.avgCost,
+    usesMargin: holding.usesMargin,
   };
 
   return {

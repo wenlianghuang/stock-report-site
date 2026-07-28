@@ -111,6 +111,7 @@ export function TwStockDashboard() {
   const [isHolding, setIsHolding] = useState(false);
   const [shareCount, setShareCount] = useState("");
   const [avgCost, setAvgCost] = useState("");
+  const [usesMargin, setUsesMargin] = useState(false);
   const [holdingLoadedFor, setHoldingLoadedFor] = useState<string | null>(null);
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -188,7 +189,11 @@ export function TwStockDashboard() {
       try {
         const response = await fetch(`/api/holdings?stockId=${encodeURIComponent(id)}`);
         const data = (await response.json()) as {
-          holding?: { shareCount?: number; avgCost?: number } | null;
+          holding?: {
+            shareCount?: number;
+            avgCost?: number;
+            usesMargin?: boolean;
+          } | null;
           error?: string;
         };
         if (!response.ok) {
@@ -201,6 +206,7 @@ export function TwStockDashboard() {
         }
         setShareCount((prev) => (prev ? prev : String(data.holding?.shareCount ?? "")));
         setAvgCost((prev) => (prev ? prev : String(data.holding?.avgCost ?? "")));
+        setUsesMargin(Boolean(data.holding?.usesMargin));
         setHoldingLoadedFor(id);
       } catch {
         // ignore
@@ -231,6 +237,7 @@ export function TwStockDashboard() {
           stockId: id,
           shareCount: nextShare,
           avgCost: nextAvg,
+          usesMargin,
         }),
       });
     }, 400);
@@ -238,7 +245,7 @@ export function TwStockDashboard() {
     return () => {
       window.clearTimeout(handle);
     };
-  }, [isHolding, stockId, shareCount, avgCost]);
+  }, [isHolding, stockId, shareCount, avgCost, usesMargin]);
 
   useEffect(() => {
     if (reports.length === 0) return;
@@ -261,6 +268,7 @@ export function TwStockDashboard() {
     setIsHolding(fields.isHolding);
     setShareCount(fields.isHolding ? fields.shareCount : "");
     setAvgCost(fields.isHolding ? fields.avgCost : "");
+    setUsesMargin(fields.isHolding ? Boolean(fields.usesMargin) : false);
     setHoldingLoadedFor(fields.stockId.trim() || null);
   }
 
@@ -293,6 +301,7 @@ export function TwStockDashboard() {
       isHolding: fields.isHolding,
       shareCount: fields.isHolding ? fields.shareCount : "",
       avgCost: fields.isHolding ? fields.avgCost : "",
+      usesMargin: fields.isHolding ? Boolean(fields.usesMargin) : false,
     });
   }
 
@@ -301,6 +310,7 @@ export function TwStockDashboard() {
     isHolding: boolean;
     shareCount: string;
     avgCost: string;
+    usesMargin: boolean;
   }) {
     setError("");
     setLoading(true);
@@ -317,6 +327,7 @@ export function TwStockDashboard() {
                 isHolding: true,
                 shareCount: Number(fields.shareCount),
                 avgCost: Number(fields.avgCost),
+                usesMargin: fields.usesMargin,
               }
             : {}),
         }),
@@ -341,7 +352,13 @@ export function TwStockDashboard() {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
-    await createReportFromFields({ stockId, isHolding, shareCount, avgCost });
+    await createReportFromFields({
+      stockId,
+      isHolding,
+      shareCount,
+      avgCost,
+      usesMargin: isHolding ? usesMargin : false,
+    });
   }
 
   async function onDelete(report: ReportRecord) {
@@ -458,7 +475,11 @@ export function TwStockDashboard() {
               <input
                 type="checkbox"
                 checked={isHolding}
-                onChange={(event) => setIsHolding(event.target.checked)}
+                onChange={(event) => {
+                  const next = event.target.checked;
+                  setIsHolding(next);
+                  if (!next) setUsesMargin(false);
+                }}
                 className="h-4 w-4 rounded border-zinc-300"
               />
               有持股
@@ -485,6 +506,15 @@ export function TwStockDashboard() {
                   required
                   className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[9rem] dark:border-zinc-700 dark:bg-black"
                 />
+                <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={usesMargin}
+                    onChange={(event) => setUsesMargin(event.target.checked)}
+                    className="h-4 w-4 rounded border-zinc-300"
+                  />
+                  使用融資
+                </label>
               </>
             ) : null}
             <input
@@ -661,6 +691,7 @@ export function TwStockDashboard() {
                                                         持股{" "}
                                                         {report.shareCount.toLocaleString("zh-TW")}{" "}
                                                         股
+                                                        {report.usesMargin ? " · 融資" : ""}
                                                       </span>
                                                     ) : null}
                                                     {report.tradeDate ? (

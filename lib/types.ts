@@ -73,6 +73,7 @@ export type PositionSummary = {
   position_bias_label?: string;
   avg_cost?: number;
   shares?: number;
+  uses_margin?: boolean;
   scenario_plan: PositionScenarioPlan[];
   narrative: {
     position_status?: string | null;
@@ -154,6 +155,7 @@ export type ReportRecord = {
   isHolding: boolean;
   shareCount?: number;
   avgCost?: number;
+  usesMargin?: boolean;
   positionMarkdown?: string;
   factsJson?: ChipFacts;
   historyJson?: HistoryDay[];
@@ -173,6 +175,7 @@ export type ReportRow = {
   is_holding: boolean;
   share_count: number | null;
   avg_cost: number | null;
+  uses_margin?: boolean;
   position_markdown: string | null;
   facts_json: ChipFacts | null;
   history_json: HistoryDay[] | null;
@@ -329,6 +332,7 @@ export type AgentJob = {
   is_holding?: boolean;
   share_count?: number | null;
   avg_cost?: number | null;
+  uses_margin?: boolean;
 };
 
 export type HoldingRecord = {
@@ -337,6 +341,7 @@ export type HoldingRecord = {
   stockId: string;
   shareCount: number;
   avgCost: number;
+  usesMargin: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -347,6 +352,7 @@ export type HoldingRow = {
   stock_id: string;
   share_count: number;
   avg_cost: number;
+  uses_margin?: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -367,6 +373,7 @@ export function rowToReport(row: ReportRow): ReportRecord {
     isHolding: row.is_holding,
     shareCount: row.share_count ?? undefined,
     avgCost: row.avg_cost ?? undefined,
+    usesMargin: row.uses_margin ?? false,
     positionMarkdown: row.position_markdown ?? undefined,
     factsJson: row.facts_json ?? undefined,
     historyJson: row.history_json ?? undefined,
@@ -381,6 +388,7 @@ export function rowToHolding(row: HoldingRow): HoldingRecord {
     stockId: row.stock_id,
     shareCount: row.share_count,
     avgCost: Number(row.avg_cost),
+    usesMargin: row.uses_margin ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

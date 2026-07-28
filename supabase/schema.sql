@@ -14,6 +14,7 @@ create table if not exists public.reports (
   is_holding boolean not null default false,
   share_count integer,
   avg_cost numeric,
+  uses_margin boolean not null default false,
   position_markdown text,
   facts_json jsonb,
   history_json jsonb,
@@ -73,6 +74,7 @@ create table if not exists public.holdings (
   stock_id text not null,
   share_count integer not null,
   avg_cost numeric not null,
+  uses_margin boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint holdings_stock_id_check

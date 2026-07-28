@@ -32,6 +32,7 @@ export async function POST(request: Request) {
     isHolding?: boolean;
     shareCount?: number;
     avgCost?: number;
+    usesMargin?: boolean;
   };
   const stockId = body.stockId?.trim() ?? "";
   const tradeDate = body.tradeDate?.trim() ?? "";
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
     body.shareCount !== undefined ? Number(body.shareCount) : undefined;
   const avgCost =
     body.avgCost !== undefined ? Number(body.avgCost) : undefined;
+  const usesMargin = isHolding && body.usesMargin === true;
 
   if (!isValidStockId(stockId)) {
     return NextResponse.json(
@@ -88,6 +90,7 @@ export async function POST(request: Request) {
       isHolding,
       shareCount: isHolding ? shareCount : undefined,
       avgCost: isHolding ? avgCost : undefined,
+      usesMargin: isHolding ? usesMargin : undefined,
     });
     const report = await createReport({
       userId: user.id,
@@ -97,6 +100,7 @@ export async function POST(request: Request) {
       isHolding,
       shareCount: isHolding ? shareCount : undefined,
       avgCost: isHolding ? avgCost : undefined,
+      usesMargin: isHolding ? usesMargin : undefined,
     });
 
     return NextResponse.json({ report, agentJob });

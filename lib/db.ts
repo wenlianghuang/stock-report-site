@@ -21,6 +21,7 @@ export async function createReport(input: {
   isHolding?: boolean;
   shareCount?: number;
   avgCost?: number;
+  usesMargin?: boolean;
 }): Promise<ReportRecord> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -31,6 +32,7 @@ export async function createReport(input: {
       agent_job_id: input.agentJobId,
       status: "queued",
       is_holding: input.isHolding ?? false,
+      uses_margin: input.isHolding ? Boolean(input.usesMargin) : false,
       ...(input.tradeDate ? { trade_date: input.tradeDate } : {}),
       ...(input.isHolding && input.shareCount !== undefined
         ? { share_count: input.shareCount }
@@ -202,6 +204,7 @@ export async function upsertHoldingForUserStock(input: {
   stockId: string;
   shareCount: number;
   avgCost: number;
+  usesMargin?: boolean;
 }): Promise<HoldingRecord> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -212,6 +215,7 @@ export async function upsertHoldingForUserStock(input: {
         stock_id: input.stockId,
         share_count: input.shareCount,
         avg_cost: input.avgCost,
+        uses_margin: Boolean(input.usesMargin),
       },
       { onConflict: "user_id,stock_id" },
     )

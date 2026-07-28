@@ -232,8 +232,10 @@ export default function ReportPage() {
                   report.tradeDate ? ` · ${report.tradeDate}` : ""
                 }${
                   report.isHolding && report.shareCount
-                    ? ` · 持股 ${report.shareCount.toLocaleString("zh-TW")} 股`
-                    : ""
+                    ? ` · 持股 ${report.shareCount.toLocaleString("zh-TW")} 股${
+                        report.usesMargin ? " · 融資" : ""
+                      }`
+                    : ""}
                 }`
               : "載入中…"}
           </h1>

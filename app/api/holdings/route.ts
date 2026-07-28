@@ -34,11 +34,13 @@ export async function POST(request: Request) {
     stockId?: string;
     shareCount?: number;
     avgCost?: number;
+    usesMargin?: boolean;
   };
 
   const stockId = body.stockId?.trim() ?? "";
   const shareCount = body.shareCount !== undefined ? Number(body.shareCount) : undefined;
   const avgCost = body.avgCost !== undefined ? Number(body.avgCost) : undefined;
+  const usesMargin = body.usesMargin === true;
 
   if (!isValidStockId(stockId)) {
     return NextResponse.json({ error: "請輸入 4～6 位數台股代號" }, { status: 400 });
@@ -56,6 +58,7 @@ export async function POST(request: Request) {
       stockId,
       shareCount,
       avgCost,
+      usesMargin,
     });
     return NextResponse.json({ holding });
   } catch (error) {

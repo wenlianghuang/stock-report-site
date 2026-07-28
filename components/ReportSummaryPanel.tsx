@@ -318,6 +318,12 @@ function PositionSummarySection({ position }: { position: PositionSummary }) {
             <dd className="font-medium">{position.avg_cost.toFixed(2)}</dd>
           </div>
         ) : null}
+        {position.uses_margin != null ? (
+          <div>
+            <dt className="text-zinc-500">融資</dt>
+            <dd className="font-medium">{position.uses_margin ? "是" : "否"}</dd>
+          </div>
+        ) : null}
       </dl>
 
       {position.scenario_plan.length > 0 ? (

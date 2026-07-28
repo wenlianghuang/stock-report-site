@@ -51,6 +51,7 @@ type CreateAgentJobInput = {
   isHolding?: boolean;
   shareCount?: number;
   avgCost?: number;
+  usesMargin?: boolean;
 };
 
 type LastTradingDateResponse = {
@@ -73,6 +74,7 @@ export async function createAgentJob(
     is_holding?: boolean;
     share_count?: number;
     avg_cost?: number;
+    uses_margin?: boolean;
   } = {
     stock_id: params.stockId,
     skip_pdf: true,
@@ -87,6 +89,9 @@ export async function createAgentJob(
     }
     if (params.avgCost !== undefined) {
       body.avg_cost = params.avgCost;
+    }
+    if (params.usesMargin) {
+      body.uses_margin = true;
     }
   }
 

@@ -721,6 +721,19 @@ export function VoiceReportModal({
                         />
                       </dd>
                     </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-zinc-500">使用融資</dt>
+                      <dd>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(draft.usesMargin)}
+                          onChange={(e) =>
+                            updateDraft("usesMargin", e.target.checked)
+                          }
+                          className="h-4 w-4"
+                        />
+                      </dd>
+                    </div>
                   </>
                 ) : null}
               </dl>
