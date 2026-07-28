@@ -64,6 +64,23 @@ export type PositionScenarioPlan = {
   trigger_hint: string;
 };
 
+export type PositionLegSummary = {
+  shares?: number;
+  avg_cost?: number;
+  unrealized_pnl_pct?: number | null;
+  pnl_bucket?: string;
+  pnl_bucket_label?: string;
+  position_bias?: string;
+  position_bias_label?: string;
+  uses_margin?: boolean;
+  maintenance_rate_pct?: number | null;
+  distance_to_call_pp?: number | null;
+  margin_call_price?: number | null;
+  distance_to_call_price_pct?: number | null;
+  margin_pressure_zone?: string;
+  margin_pressure_label?: string;
+};
+
 export type PositionSummary = {
   version: number;
   unrealized_pnl_pct?: number | null;
@@ -74,21 +91,17 @@ export type PositionSummary = {
   avg_cost?: number;
   shares?: number;
   uses_margin?: boolean;
+  maintenance_rate_pct?: number | null;
+  distance_to_call_pp?: number | null;
+  margin_call_price?: number | null;
+  distance_to_call_price_pct?: number | null;
+  margin_pressure_zone?: string;
+  margin_pressure_label?: string;
   priority?: string;
   priority_label?: string;
   synthesis_hint?: string;
-  cash?: {
-    shares?: number;
-    avg_cost?: number;
-    unrealized_pnl_pct?: number | null;
-    pnl_bucket_label?: string;
-  } | null;
-  margin?: {
-    shares?: number;
-    avg_cost?: number;
-    unrealized_pnl_pct?: number | null;
-    pnl_bucket_label?: string;
-  } | null;
+  cash?: PositionLegSummary | null;
+  margin?: PositionLegSummary | null;
   scenario_plan: PositionScenarioPlan[];
   narrative: {
     position_status?: string | null;

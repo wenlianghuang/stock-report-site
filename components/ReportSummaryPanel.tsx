@@ -62,12 +62,35 @@ function formatLots(value?: number) {
   return `${prefix}${value.toLocaleString("zh-TW")} 張`;
 }
 
-function formatPct(value?: number) {
+function formatPct(value?: number | null) {
   if (value == null) {
     return "—";
   }
   const prefix = value > 0 ? "+" : "";
   return `${prefix}${value.toFixed(2)}%`;
+}
+
+function formatPp(value?: number | null) {
+  if (value == null) {
+    return "—";
+  }
+  const prefix = value > 0 ? "+" : "";
+  return `${prefix}${value.toFixed(1)}pp`;
+}
+
+function marginPressureTone(zone?: string): SummaryTone {
+  switch (zone) {
+    case "safe":
+      return "bullish";
+    case "watch":
+      return "info";
+    case "tight":
+      return "neutral";
+    case "critical":
+      return "bearish";
+    default:
+      return "neutral";
+  }
 }
 
 function SectionCard({
@@ -294,6 +317,12 @@ function ScenarioCards({
 }
 
 function PositionSummarySection({ position }: { position: PositionSummary }) {
+  const showMaintenance =
+    Boolean(position.uses_margin) &&
+    position.maintenance_rate_pct != null &&
+    position.margin_pressure_zone != null &&
+    position.margin_pressure_zone !== "unknown";
+
   return (
     <div className="flex flex-col gap-4 border-t border-zinc-200 pt-6 dark:border-zinc-800">
       <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
@@ -362,6 +391,55 @@ function PositionSummarySection({ position }: { position: PositionSummary }) {
           </div>
         ) : null}
       </dl>
+
+      {showMaintenance ? (
+        <SectionCard title="融資維持率（單檔估算）">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            {toneBadge(
+              position.margin_pressure_label ||
+                position.margin_pressure_zone ||
+                "壓力未知",
+              marginPressureTone(position.margin_pressure_zone),
+            )}
+            <span className="text-xs text-zinc-500">
+              非整戶維持率；成數／追繳線為系統預設估算
+            </span>
+          </div>
+          <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+            <div>
+              <dt className="text-zinc-500">維持率</dt>
+              <dd className="font-medium">
+                {position.maintenance_rate_pct!.toFixed(1)}%
+              </dd>
+            </div>
+            <div>
+              <dt className="text-zinc-500">距追繳</dt>
+              <dd className="font-medium">
+                {formatPp(position.distance_to_call_pp)}
+              </dd>
+            </div>
+            {position.margin_call_price != null ? (
+              <div>
+                <dt className="text-zinc-500">估算追繳價</dt>
+                <dd className="font-medium">
+                  {position.margin_call_price.toFixed(2)}
+                  {position.distance_to_call_price_pct != null
+                    ? `（現價 ${formatPct(position.distance_to_call_price_pct)}）`
+                    : ""}
+                </dd>
+              </div>
+            ) : null}
+            {position.margin?.avg_cost != null ? (
+              <div>
+                <dt className="text-zinc-500">融資均價</dt>
+                <dd className="font-medium">
+                  {position.margin.avg_cost.toFixed(2)}
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        </SectionCard>
+      ) : null}
 
       {position.scenario_plan.length > 0 ? (
         <SectionCard title="操作情境權重">
