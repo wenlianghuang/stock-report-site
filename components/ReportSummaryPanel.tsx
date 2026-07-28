@@ -343,7 +343,7 @@ function PositionSummarySection({ position }: { position: PositionSummary }) {
         ) : null}
         {position.margin ? (
           <div>
-            <dt className="text-zinc-500">融資腿</dt>
+            <dt className="text-zinc-500">融資</dt>
             <dd className="font-medium">
               {position.margin.shares?.toLocaleString("zh-TW")} 股
               {position.margin.pnl_bucket_label
