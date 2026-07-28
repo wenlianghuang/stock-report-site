@@ -274,7 +274,13 @@ function ScenarioCards({
           className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-950"
         >
           {scenario.title ? (
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            <p
+              className={
+                /^(主線|次線|尾線)/.test(scenario.title.trim())
+                  ? "mb-2 text-base font-extrabold text-zinc-900 dark:text-zinc-50"
+                  : "mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500"
+              }
+            >
               {scenario.title}
             </p>
           ) : null}
@@ -365,10 +371,10 @@ function PositionSummarySection({ position }: { position: PositionSummary }) {
                 key={item.label}
                 className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-950"
               >
-                <p className="text-xs font-semibold text-zinc-500">
+                <p className="text-base font-extrabold text-zinc-900 dark:text-zinc-50">
                   {item.rank} · {item.weight_pct}%
                 </p>
-                <p className="mt-1 font-medium text-zinc-900 dark:text-zinc-100">
+                <p className="mt-1 text-sm font-medium text-zinc-800 dark:text-zinc-200">
                   {item.label}
                 </p>
                 <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">

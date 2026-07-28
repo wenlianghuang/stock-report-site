@@ -62,3 +62,48 @@ body {
   border: none;
   border-top: 1px solid rgb(228 228 231);
 }
+
+/* 操作情境：主線／次線／尾線標題 */
+.report-markdown .scenario-rank-title,
+.report-markdown .scenario-rank-heading,
+.report-markdown .scenario-rank-item > .scenario-rank-title,
+.report-markdown .scenario-rank-item > strong {
+  display: inline-block;
+  margin-top: 0.75rem;
+  margin-bottom: 0.25rem;
+  font-size: 1.125rem;
+  font-weight: 800;
+  line-height: 1.4;
+  color: #09090b;
+}
+
+.report-markdown .scenario-rank-heading {
+  display: block;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.report-markdown .scenario-rank-item {
+  margin-top: 1rem;
+  list-style: none;
+}
+
+.report-markdown .scenario-rank-item::marker {
+  content: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .report-markdown .scenario-rank-title,
+  .report-markdown .scenario-rank-heading,
+  .report-markdown .scenario-rank-item > .scenario-rank-title,
+  .report-markdown .scenario-rank-item > strong {
+    color: #fafafa;
+  }
+}
+
+.dark .report-markdown .scenario-rank-title,
+.dark .report-markdown .scenario-rank-heading,
+.dark .report-markdown .scenario-rank-item > .scenario-rank-title,
+.dark .report-markdown .scenario-rank-item > strong {
+  color: #fafafa;
+}

@@ -1,9 +1,11 @@
 "use client";
 
+import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 const BASE_RATE_HEADING_PREFIX = "### 歷史命中率";
+const SCENARIO_RANK_RE = /^(主線|次線|尾線)/;
 
 type SplitResult = {
   before: string;
@@ -39,14 +41,73 @@ function splitBaseRate(markdown: string): SplitResult {
   return { before: before.trim(), baseRateTitle, baseRateBody, after: after.trim() };
 }
 
+function extractText(node: ReactNode): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join("");
+  if (typeof node === "object" && "props" in node) {
+    const props = node.props as { children?: ReactNode };
+    return extractText(props.children);
+  }
+  return "";
+}
+
+function isScenarioRankTitle(text: string): boolean {
+  return SCENARIO_RANK_RE.test(text.trim());
+}
+
+const markdownComponents = {
+  strong: ({ children }: { children?: ReactNode }) => {
+    const text = extractText(children);
+    if (isScenarioRankTitle(text)) {
+      return <strong className="scenario-rank-title">{children}</strong>;
+    }
+    return <strong>{children}</strong>;
+  },
+  li: ({ children }: { children?: ReactNode }) => {
+    const text = extractText(children);
+    if (isScenarioRankTitle(text)) {
+      return <li className="scenario-rank-item">{children}</li>;
+    }
+    return <li>{children}</li>;
+  },
+  h3: ({ children }: { children?: ReactNode }) => {
+    const text = extractText(children);
+    if (isScenarioRankTitle(text)) {
+      return <h3 className="scenario-rank-heading">{children}</h3>;
+    }
+    return <h3>{children}</h3>;
+  },
+  h4: ({ children }: { children?: ReactNode }) => {
+    const text = extractText(children);
+    if (isScenarioRankTitle(text)) {
+      return <h4 className="scenario-rank-heading">{children}</h4>;
+    }
+    return <h4>{children}</h4>;
+  },
+  p: ({ children }: { children?: ReactNode }) => {
+    const text = extractText(children);
+    if (isScenarioRankTitle(text)) {
+      return <p className="scenario-rank-heading">{children}</p>;
+    }
+    return <p>{children}</p>;
+  },
+};
+
+function ReportMarkdown({ source }: { source: string }) {
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+      {source}
+    </ReactMarkdown>
+  );
+}
+
 export function MarkdownReport({ markdown }: { markdown: string }) {
   const { before, baseRateTitle, baseRateBody, after } = splitBaseRate(markdown);
 
   return (
     <article className="report-markdown max-w-none">
-      {before ? (
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{before}</ReactMarkdown>
-      ) : null}
+      {before ? <ReportMarkdown source={before} /> : null}
 
       {baseRateTitle ? (
         <details className="my-4 rounded-lg border border-zinc-200 dark:border-zinc-800">
@@ -57,14 +118,12 @@ export function MarkdownReport({ markdown }: { markdown: string }) {
             </span>
           </summary>
           <div className="px-4 pb-4">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{baseRateBody}</ReactMarkdown>
+            <ReportMarkdown source={baseRateBody} />
           </div>
         </details>
       ) : null}
 
-      {after ? (
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{after}</ReactMarkdown>
-      ) : null}
+      {after ? <ReportMarkdown source={after} /> : null}
     </article>
   );
 }
