@@ -6,6 +6,10 @@ import { ReportStatusBadge } from "@/components/ReportStatusBadge";
 import { VoiceReportModal } from "@/components/VoiceReportModal";
 import type { VoiceReportFields } from "@/lib/voice-parse";
 import type { ReportRecord } from "@/lib/types";
+import {
+  formatMarginQuantity,
+  sharesToLots,
+} from "@/lib/holding-legs";
 
 const CHIP_READY_MINUTES = 21 * 60 + 30;
 
@@ -111,7 +115,7 @@ export function TwStockDashboard() {
   const [isHolding, setIsHolding] = useState(false);
   const [cashShareCount, setCashShareCount] = useState("");
   const [cashAvgCost, setCashAvgCost] = useState("");
-  const [marginShareCount, setMarginShareCount] = useState("");
+  const [marginLotCount, setMarginLotCount] = useState("");
   const [marginAvgCost, setMarginAvgCost] = useState("");
   const [holdingLoadedFor, setHoldingLoadedFor] = useState<string | null>(null);
   const [reports, setReports] = useState<ReportRecord[]>([]);
@@ -180,7 +184,7 @@ export function TwStockDashboard() {
     if (holdingLoadedFor === id) return;
 
     const hasAny =
-      Boolean(cashShareCount || cashAvgCost || marginShareCount || marginAvgCost);
+      Boolean(cashShareCount || cashAvgCost || marginLotCount || marginAvgCost);
     if (hasAny) {
       setHoldingLoadedFor(id);
       return;
@@ -217,12 +221,18 @@ export function TwStockDashboard() {
             setCashAvgCost(String(h.cashAvgCost ?? ""));
           }
           if (h.marginShareCount) {
-            setMarginShareCount(String(h.marginShareCount));
+            const lots = sharesToLots(h.marginShareCount);
+            setMarginLotCount(
+              lots != null ? String(lots) : String(Math.round(h.marginShareCount / 1000)),
+            );
             setMarginAvgCost(String(h.marginAvgCost ?? ""));
           }
         } else if (h.shareCount && h.avgCost) {
           if (h.usesMargin) {
-            setMarginShareCount(String(h.shareCount));
+            const lots = sharesToLots(h.shareCount);
+            setMarginLotCount(
+              lots != null ? String(lots) : String(Math.round(h.shareCount / 1000)),
+            );
             setMarginAvgCost(String(h.avgCost));
           } else {
             setCashShareCount(String(h.shareCount));
@@ -244,7 +254,7 @@ export function TwStockDashboard() {
     holdingLoadedFor,
     cashShareCount,
     cashAvgCost,
-    marginShareCount,
+    marginLotCount,
     marginAvgCost,
   ]);
 
@@ -255,13 +265,17 @@ export function TwStockDashboard() {
 
     const cashShares = cashShareCount ? Number(cashShareCount) : 0;
     const cashCost = cashAvgCost ? Number(cashAvgCost) : undefined;
-    const marginShares = marginShareCount ? Number(marginShareCount) : 0;
+    const marginLots = marginLotCount ? Number(marginLotCount) : 0;
     const mCost = marginAvgCost ? Number(marginAvgCost) : undefined;
 
     const cashOk =
       cashShares > 0 && cashCost !== undefined && Number.isFinite(cashCost) && cashCost > 0;
     const marginOk =
-      marginShares > 0 && mCost !== undefined && Number.isFinite(mCost) && mCost > 0;
+      marginLots > 0 &&
+      Number.isInteger(marginLots) &&
+      mCost !== undefined &&
+      Number.isFinite(mCost) &&
+      mCost > 0;
     if (!cashOk && !marginOk) return;
 
     const handle = window.setTimeout(() => {
@@ -274,7 +288,7 @@ export function TwStockDashboard() {
             ? { cashShareCount: cashShares, cashAvgCost: cashCost }
             : {}),
           ...(marginOk
-            ? { marginShareCount: marginShares, marginAvgCost: mCost }
+            ? { marginLotCount: marginLots, marginAvgCost: mCost }
             : {}),
         }),
       });
@@ -288,7 +302,7 @@ export function TwStockDashboard() {
     stockId,
     cashShareCount,
     cashAvgCost,
-    marginShareCount,
+    marginLotCount,
     marginAvgCost,
   ]);
 
@@ -308,23 +322,32 @@ export function TwStockDashboard() {
     });
   }, [reports, tradeDate]);
 
+  /** 語音：融資數量若 <1000 或非整千，視為張數。 */
+  function voiceMarginToLots(raw: string): string {
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) return "";
+    if (n < 1000 || n % 1000 !== 0) return String(Math.round(n));
+    const lots = sharesToLots(n);
+    return lots != null ? String(lots) : String(Math.round(n / 1000));
+  }
+
   function applyVoiceFields(fields: VoiceReportFields) {
     setStockId(fields.stockId.trim());
     setIsHolding(fields.isHolding);
     if (!fields.isHolding) {
       setCashShareCount("");
       setCashAvgCost("");
-      setMarginShareCount("");
+      setMarginLotCount("");
       setMarginAvgCost("");
     } else if (fields.usesMargin) {
       setCashShareCount("");
       setCashAvgCost("");
-      setMarginShareCount(fields.shareCount);
+      setMarginLotCount(voiceMarginToLots(fields.shareCount));
       setMarginAvgCost(fields.avgCost);
     } else {
       setCashShareCount(fields.shareCount);
       setCashAvgCost(fields.avgCost);
-      setMarginShareCount("");
+      setMarginLotCount("");
       setMarginAvgCost("");
     }
     setHoldingLoadedFor(fields.stockId.trim() || null);
@@ -359,7 +382,10 @@ export function TwStockDashboard() {
       isHolding: fields.isHolding,
       cashShareCount: fields.isHolding && !fields.usesMargin ? fields.shareCount : "",
       cashAvgCost: fields.isHolding && !fields.usesMargin ? fields.avgCost : "",
-      marginShareCount: fields.isHolding && fields.usesMargin ? fields.shareCount : "",
+      marginLotCount:
+        fields.isHolding && fields.usesMargin
+          ? voiceMarginToLots(fields.shareCount)
+          : "",
       marginAvgCost: fields.isHolding && fields.usesMargin ? fields.avgCost : "",
     });
   }
@@ -369,7 +395,7 @@ export function TwStockDashboard() {
     isHolding: boolean;
     cashShareCount: string;
     cashAvgCost: string;
-    marginShareCount: string;
+    marginLotCount: string;
     marginAvgCost: string;
   }) {
     setError("");
@@ -378,9 +404,7 @@ export function TwStockDashboard() {
     try {
       const cashShares = fields.cashShareCount ? Number(fields.cashShareCount) : 0;
       const cashCost = fields.cashAvgCost ? Number(fields.cashAvgCost) : undefined;
-      const marginShares = fields.marginShareCount
-        ? Number(fields.marginShareCount)
-        : 0;
+      const marginLots = fields.marginLotCount ? Number(fields.marginLotCount) : 0;
       const mCost = fields.marginAvgCost ? Number(fields.marginAvgCost) : undefined;
 
       const response = await fetch("/api/reports", {
@@ -395,8 +419,8 @@ export function TwStockDashboard() {
                 ...(cashShares > 0 && cashCost
                   ? { cashShareCount: cashShares, cashAvgCost: cashCost }
                   : {}),
-                ...(marginShares > 0 && mCost
-                  ? { marginShareCount: marginShares, marginAvgCost: mCost }
+                ...(marginLots > 0 && mCost
+                  ? { marginLotCount: marginLots, marginAvgCost: mCost }
                   : {}),
               }
             : {}),
@@ -427,7 +451,7 @@ export function TwStockDashboard() {
       isHolding,
       cashShareCount,
       cashAvgCost,
-      marginShareCount,
+      marginLotCount,
       marginAvgCost,
     });
   }
@@ -552,7 +576,7 @@ export function TwStockDashboard() {
                   if (!next) {
                     setCashShareCount("");
                     setCashAvgCost("");
-                    setMarginShareCount("");
+                    setMarginLotCount("");
                     setMarginAvgCost("");
                   }
                 }}
@@ -589,9 +613,9 @@ export function TwStockDashboard() {
                     type="number"
                     min={1}
                     step={1}
-                    value={marginShareCount}
-                    onChange={(event) => setMarginShareCount(event.target.value)}
-                    placeholder="融資股數"
+                    value={marginLotCount}
+                    onChange={(event) => setMarginLotCount(event.target.value)}
+                    placeholder="融資張數"
                     className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
                   />
                   <input
@@ -621,7 +645,7 @@ export function TwStockDashboard() {
             </button>
           </div>
           <p className="text-xs text-zinc-500">
-            交易日期已依證交所開休市日期表自動帶入，並以加權指數成交確認臨時休市（21:30 前用前一交易日、之後用當日；休市日順延至最近交易日），可自行調整；清空則由系統使用最近交易日。有持股時請至少填現股或融資一組（可同時填兩組，系統會分開分析並給綜合結論）。
+            交易日期已依證交所開休市日期表自動帶入，並以加權指數成交確認臨時休市（21:30 前用前一交易日、之後用當日；休市日順延至最近交易日），可自行調整；清空則由系統使用最近交易日。有持股時請至少填現股（股）或融資（張，1 張＝1000 股）一組；可同時填兩組，系統會分開分析並給綜合結論。
           </p>
         </form>
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
@@ -781,10 +805,10 @@ export function TwStockDashboard() {
                                                         {report.shareCount.toLocaleString("zh-TW")}{" "}
                                                         股
                                                         {report.cashShareCount
-                                                          ? ` · 現股 ${report.cashShareCount.toLocaleString("zh-TW")}`
+                                                          ? ` · 現股 ${report.cashShareCount.toLocaleString("zh-TW")} 股`
                                                           : ""}
                                                         {report.marginShareCount
-                                                          ? ` · 融資 ${report.marginShareCount.toLocaleString("zh-TW")}`
+                                                          ? ` · 融資 ${formatMarginQuantity(report.marginShareCount)}`
                                                           : report.usesMargin
                                                             ? " · 融資"
                                                             : ""}

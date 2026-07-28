@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const stockId = url.searchParams.get("stockId")?.trim() ?? "";
   if (!isValidStockId(stockId)) {
-    return NextResponse.json({ error: "請輸入 4～6 位數台股代號" }, { status: 400 });
+    return NextResponse.json({ error: "請輸入 4～6 碼台股代號" }, { status: 400 });
   }
 
   const holding = await findHoldingForUserStock(user.id, stockId);
@@ -39,18 +39,20 @@ export async function POST(request: Request) {
     cashShareCount?: number;
     cashAvgCost?: number;
     marginShareCount?: number;
+    marginLotCount?: number;
     marginAvgCost?: number;
   };
 
   const stockId = body.stockId?.trim() ?? "";
   if (!isValidStockId(stockId)) {
-    return NextResponse.json({ error: "請輸入 4～6 位數台股代號" }, { status: 400 });
+    return NextResponse.json({ error: "請輸入 4～6 碼台股代號" }, { status: 400 });
   }
 
   const blended = blendHoldingLegs({
     cashShareCount: body.cashShareCount,
     cashAvgCost: body.cashAvgCost,
     marginShareCount: body.marginShareCount,
+    marginLotCount: body.marginLotCount,
     marginAvgCost: body.marginAvgCost,
   });
 
@@ -76,7 +78,10 @@ export async function POST(request: Request) {
     usesMargin = body.usesMargin === true;
     if (!isValidShareCount(shareCount) || !isValidAvgCost(avgCost)) {
       return NextResponse.json(
-        { error: "請至少完整填寫現股或融資的股數與均價" },
+        {
+          error:
+            "請至少完整填寫現股（股）或融資（張）與均價；融資須為整張",
+        },
         { status: 400 },
       );
     }

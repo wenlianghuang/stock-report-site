@@ -20,6 +20,7 @@ import type {
   ReportSummaryJson,
   SummaryTone,
 } from "@/lib/types";
+import { formatMarginQuantity } from "@/lib/holding-legs";
 
 const TONE_CLASS: Record<SummaryTone, string> = {
   bullish:
@@ -345,7 +346,9 @@ function PositionSummarySection({ position }: { position: PositionSummary }) {
           <div>
             <dt className="text-zinc-500">融資</dt>
             <dd className="font-medium">
-              {position.margin.shares?.toLocaleString("zh-TW")} 股
+              {position.margin.shares != null
+                ? formatMarginQuantity(position.margin.shares)
+                : "—"}
               {position.margin.pnl_bucket_label
                 ? ` · ${position.margin.pnl_bucket_label}`
                 : ""}

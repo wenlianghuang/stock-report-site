@@ -11,6 +11,7 @@ import {
   statusHint,
 } from "@/components/ReportStatusBadge";
 import type { ReportRecord, ReportStatus } from "@/lib/types";
+import { formatMarginQuantity } from "@/lib/holding-legs";
 
 type ReportTab = "summary" | "chart" | "market" | "position";
 
@@ -228,23 +229,23 @@ export default function ReportPage() {
           </Link>
           <h1 className="mt-2 text-2xl font-semibold">
             {report
-              ? `台股 ${report.stockName ? `${report.stockId} — ${report.stockName}` : report.stockId}${
-                  report.tradeDate ? ` · ${report.tradeDate}` : ""
-                }${
-                  report.isHolding && report.shareCount
-                    ? ` · 持股 ${report.shareCount.toLocaleString("zh-TW")} 股${
-                        report.cashShareCount
-                          ? ` · 現股 ${report.cashShareCount.toLocaleString("zh-TW")}`
-                          : ""
-                      }${
-                        report.marginShareCount
-                          ? ` · 融資 ${report.marginShareCount.toLocaleString("zh-TW")}`
-                          : report.usesMargin
-                            ? " · 融資"
-                            : ""
-                      }`
-                    : ""}
-                }`
+              ? (() => {
+                  const base = `台股 ${
+                    report.stockName
+                      ? `${report.stockId} — ${report.stockName}`
+                      : report.stockId
+                  }${report.tradeDate ? ` · ${report.tradeDate}` : ""}`;
+                  if (!report.isHolding || !report.shareCount) return base;
+                  const cash = report.cashShareCount
+                    ? ` · 現股 ${report.cashShareCount.toLocaleString("zh-TW")} 股`
+                    : "";
+                  const margin = report.marginShareCount
+                    ? ` · 融資 ${formatMarginQuantity(report.marginShareCount)}`
+                    : report.usesMargin
+                      ? " · 融資"
+                      : "";
+                  return `${base} · 持股 ${report.shareCount.toLocaleString("zh-TW")} 股${cash}${margin}`;
+                })()
               : "載入中…"}
           </h1>
         </div>

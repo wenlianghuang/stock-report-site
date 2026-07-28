@@ -726,7 +726,7 @@ export function VoiceReportModal({
                       </dd>
                     </div>
                     <div className="flex justify-between gap-4">
-                      <dt className="text-zinc-500">融資股數</dt>
+                      <dt className="text-zinc-500">融資張數</dt>
                       <dd>
                         <input
                           type="number"
