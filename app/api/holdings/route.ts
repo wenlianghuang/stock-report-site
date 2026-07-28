@@ -6,6 +6,7 @@ import {
   isValidStockId,
   upsertHoldingForUserStock,
 } from "@/lib/db";
+import { blendHoldingLegs } from "@/lib/holding-legs";
 import { requireUser } from "@/lib/auth";
 
 export async function GET(request: Request) {
@@ -35,21 +36,50 @@ export async function POST(request: Request) {
     shareCount?: number;
     avgCost?: number;
     usesMargin?: boolean;
+    cashShareCount?: number;
+    cashAvgCost?: number;
+    marginShareCount?: number;
+    marginAvgCost?: number;
   };
 
   const stockId = body.stockId?.trim() ?? "";
-  const shareCount = body.shareCount !== undefined ? Number(body.shareCount) : undefined;
-  const avgCost = body.avgCost !== undefined ? Number(body.avgCost) : undefined;
-  const usesMargin = body.usesMargin === true;
-
   if (!isValidStockId(stockId)) {
     return NextResponse.json({ error: "請輸入 4～6 位數台股代號" }, { status: 400 });
   }
-  if (shareCount === undefined || !isValidShareCount(shareCount)) {
-    return NextResponse.json({ error: "請輸入有效的持股股數（正整數）" }, { status: 400 });
-  }
-  if (avgCost === undefined || !isValidAvgCost(avgCost)) {
-    return NextResponse.json({ error: "請輸入有效的持股均價" }, { status: 400 });
+
+  const blended = blendHoldingLegs({
+    cashShareCount: body.cashShareCount,
+    cashAvgCost: body.cashAvgCost,
+    marginShareCount: body.marginShareCount,
+    marginAvgCost: body.marginAvgCost,
+  });
+
+  let shareCount: number;
+  let avgCost: number;
+  let usesMargin: boolean;
+  let cashShareCount: number | undefined;
+  let cashAvgCost: number | undefined;
+  let marginShareCount: number | undefined;
+  let marginAvgCost: number | undefined;
+
+  if (blended) {
+    shareCount = blended.shareCount;
+    avgCost = blended.avgCost;
+    usesMargin = blended.usesMargin;
+    cashShareCount = blended.cashShareCount;
+    cashAvgCost = blended.cashAvgCost;
+    marginShareCount = blended.marginShareCount;
+    marginAvgCost = blended.marginAvgCost;
+  } else {
+    shareCount = body.shareCount !== undefined ? Number(body.shareCount) : NaN;
+    avgCost = body.avgCost !== undefined ? Number(body.avgCost) : NaN;
+    usesMargin = body.usesMargin === true;
+    if (!isValidShareCount(shareCount) || !isValidAvgCost(avgCost)) {
+      return NextResponse.json(
+        { error: "請至少完整填寫現股或融資的股數與均價" },
+        { status: 400 },
+      );
+    }
   }
 
   try {
@@ -59,6 +89,10 @@ export async function POST(request: Request) {
       shareCount,
       avgCost,
       usesMargin,
+      cashShareCount,
+      cashAvgCost,
+      marginShareCount,
+      marginAvgCost,
     });
     return NextResponse.json({ holding });
   } catch (error) {
@@ -66,4 +100,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }
-

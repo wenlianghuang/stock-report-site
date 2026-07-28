@@ -233,7 +233,15 @@ export default function ReportPage() {
                 }${
                   report.isHolding && report.shareCount
                     ? ` · 持股 ${report.shareCount.toLocaleString("zh-TW")} 股${
-                        report.usesMargin ? " · 融資" : ""
+                        report.cashShareCount
+                          ? ` · 現股 ${report.cashShareCount.toLocaleString("zh-TW")}`
+                          : ""
+                      }${
+                        report.marginShareCount
+                          ? ` · 融資 ${report.marginShareCount.toLocaleString("zh-TW")}`
+                          : report.usesMargin
+                            ? " · 融資"
+                            : ""
                       }`
                     : ""}
                 }`

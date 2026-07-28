@@ -7,6 +7,7 @@ import {
   isValidTradeDate,
   listReportsForUser,
 } from "@/lib/db";
+import { blendHoldingLegs } from "@/lib/holding-legs";
 import { requireUser } from "@/lib/auth";
 import { checkAgentHealth, createAgentJob } from "@/lib/agent-client";
 
@@ -33,19 +34,18 @@ export async function POST(request: Request) {
     shareCount?: number;
     avgCost?: number;
     usesMargin?: boolean;
+    cashShareCount?: number;
+    cashAvgCost?: number;
+    marginShareCount?: number;
+    marginAvgCost?: number;
   };
   const stockId = body.stockId?.trim() ?? "";
   const tradeDate = body.tradeDate?.trim() ?? "";
   const isHolding = body.isHolding === true;
-  const shareCount =
-    body.shareCount !== undefined ? Number(body.shareCount) : undefined;
-  const avgCost =
-    body.avgCost !== undefined ? Number(body.avgCost) : undefined;
-  const usesMargin = isHolding && body.usesMargin === true;
 
   if (!isValidStockId(stockId)) {
     return NextResponse.json(
-      { error: "請輸入 4～6 位數台股代號" },
+      { error: "請輸入 4～6 碼台股代號" },
       { status: 400 },
     );
   }
@@ -57,18 +57,46 @@ export async function POST(request: Request) {
     );
   }
 
+  let shareCount: number | undefined;
+  let avgCost: number | undefined;
+  let usesMargin = false;
+  let cashShareCount: number | undefined;
+  let cashAvgCost: number | undefined;
+  let marginShareCount: number | undefined;
+  let marginAvgCost: number | undefined;
+
   if (isHolding) {
-    if (shareCount === undefined || !isValidShareCount(shareCount)) {
-      return NextResponse.json(
-        { error: "請輸入有效的持股股數（正整數）" },
-        { status: 400 },
-      );
-    }
-    if (avgCost === undefined || !isValidAvgCost(avgCost)) {
-      return NextResponse.json(
-        { error: "持股分析需要輸入有效的持股均價" },
-        { status: 400 },
-      );
+    const blended = blendHoldingLegs({
+      cashShareCount: body.cashShareCount,
+      cashAvgCost: body.cashAvgCost,
+      marginShareCount: body.marginShareCount,
+      marginAvgCost: body.marginAvgCost,
+    });
+    if (blended) {
+      shareCount = blended.shareCount;
+      avgCost = blended.avgCost;
+      usesMargin = blended.usesMargin;
+      cashShareCount = blended.cashShareCount;
+      cashAvgCost = blended.cashAvgCost;
+      marginShareCount = blended.marginShareCount;
+      marginAvgCost = blended.marginAvgCost;
+    } else {
+      shareCount =
+        body.shareCount !== undefined ? Number(body.shareCount) : undefined;
+      avgCost = body.avgCost !== undefined ? Number(body.avgCost) : undefined;
+      usesMargin = body.usesMargin === true;
+      if (shareCount === undefined || !isValidShareCount(shareCount)) {
+        return NextResponse.json(
+          { error: "請至少完整填寫現股或融資的股數與均價" },
+          { status: 400 },
+        );
+      }
+      if (avgCost === undefined || !isValidAvgCost(avgCost)) {
+        return NextResponse.json(
+          { error: "持股分析需要輸入有效的持股均價" },
+          { status: 400 },
+        );
+      }
     }
   }
 
@@ -91,6 +119,10 @@ export async function POST(request: Request) {
       shareCount: isHolding ? shareCount : undefined,
       avgCost: isHolding ? avgCost : undefined,
       usesMargin: isHolding ? usesMargin : undefined,
+      cashShareCount: isHolding ? cashShareCount : undefined,
+      cashAvgCost: isHolding ? cashAvgCost : undefined,
+      marginShareCount: isHolding ? marginShareCount : undefined,
+      marginAvgCost: isHolding ? marginAvgCost : undefined,
     });
     const report = await createReport({
       userId: user.id,
@@ -101,6 +133,10 @@ export async function POST(request: Request) {
       shareCount: isHolding ? shareCount : undefined,
       avgCost: isHolding ? avgCost : undefined,
       usesMargin: isHolding ? usesMargin : undefined,
+      cashShareCount: isHolding ? cashShareCount : undefined,
+      cashAvgCost: isHolding ? cashAvgCost : undefined,
+      marginShareCount: isHolding ? marginShareCount : undefined,
+      marginAvgCost: isHolding ? marginAvgCost : undefined,
     });
 
     return NextResponse.json({ report, agentJob });

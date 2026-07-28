@@ -22,6 +22,10 @@ export async function createReport(input: {
   shareCount?: number;
   avgCost?: number;
   usesMargin?: boolean;
+  cashShareCount?: number;
+  cashAvgCost?: number;
+  marginShareCount?: number;
+  marginAvgCost?: number;
 }): Promise<ReportRecord> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -39,6 +43,14 @@ export async function createReport(input: {
         : {}),
       ...(input.isHolding && input.avgCost !== undefined
         ? { avg_cost: input.avgCost }
+        : {}),
+      ...(input.isHolding
+        ? {
+            cash_share_count: input.cashShareCount ?? null,
+            cash_avg_cost: input.cashAvgCost ?? null,
+            margin_share_count: input.marginShareCount ?? null,
+            margin_avg_cost: input.marginAvgCost ?? null,
+          }
         : {}),
     })
     .select("*")
@@ -205,6 +217,10 @@ export async function upsertHoldingForUserStock(input: {
   shareCount: number;
   avgCost: number;
   usesMargin?: boolean;
+  cashShareCount?: number;
+  cashAvgCost?: number;
+  marginShareCount?: number;
+  marginAvgCost?: number;
 }): Promise<HoldingRecord> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -216,6 +232,10 @@ export async function upsertHoldingForUserStock(input: {
         share_count: input.shareCount,
         avg_cost: input.avgCost,
         uses_margin: Boolean(input.usesMargin),
+        cash_share_count: input.cashShareCount ?? null,
+        cash_avg_cost: input.cashAvgCost ?? null,
+        margin_share_count: input.marginShareCount ?? null,
+        margin_avg_cost: input.marginAvgCost ?? null,
       },
       { onConflict: "user_id,stock_id" },
     )

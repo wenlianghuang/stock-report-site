@@ -52,6 +52,10 @@ type CreateAgentJobInput = {
   shareCount?: number;
   avgCost?: number;
   usesMargin?: boolean;
+  cashShareCount?: number;
+  cashAvgCost?: number;
+  marginShareCount?: number;
+  marginAvgCost?: number;
 };
 
 type LastTradingDateResponse = {
@@ -75,6 +79,10 @@ export async function createAgentJob(
     share_count?: number;
     avg_cost?: number;
     uses_margin?: boolean;
+    cash_share_count?: number;
+    cash_avg_cost?: number;
+    margin_share_count?: number;
+    margin_avg_cost?: number;
   } = {
     stock_id: params.stockId,
     skip_pdf: true,
@@ -92,6 +100,18 @@ export async function createAgentJob(
     }
     if (params.usesMargin) {
       body.uses_margin = true;
+    }
+    if (params.cashShareCount !== undefined) {
+      body.cash_share_count = params.cashShareCount;
+    }
+    if (params.cashAvgCost !== undefined) {
+      body.cash_avg_cost = params.cashAvgCost;
+    }
+    if (params.marginShareCount !== undefined) {
+      body.margin_share_count = params.marginShareCount;
+    }
+    if (params.marginAvgCost !== undefined) {
+      body.margin_avg_cost = params.marginAvgCost;
     }
   }
 

@@ -74,6 +74,21 @@ export type PositionSummary = {
   avg_cost?: number;
   shares?: number;
   uses_margin?: boolean;
+  priority?: string;
+  priority_label?: string;
+  synthesis_hint?: string;
+  cash?: {
+    shares?: number;
+    avg_cost?: number;
+    unrealized_pnl_pct?: number | null;
+    pnl_bucket_label?: string;
+  } | null;
+  margin?: {
+    shares?: number;
+    avg_cost?: number;
+    unrealized_pnl_pct?: number | null;
+    pnl_bucket_label?: string;
+  } | null;
   scenario_plan: PositionScenarioPlan[];
   narrative: {
     position_status?: string | null;
@@ -156,6 +171,10 @@ export type ReportRecord = {
   shareCount?: number;
   avgCost?: number;
   usesMargin?: boolean;
+  cashShareCount?: number;
+  cashAvgCost?: number;
+  marginShareCount?: number;
+  marginAvgCost?: number;
   positionMarkdown?: string;
   factsJson?: ChipFacts;
   historyJson?: HistoryDay[];
@@ -176,6 +195,10 @@ export type ReportRow = {
   share_count: number | null;
   avg_cost: number | null;
   uses_margin?: boolean;
+  cash_share_count?: number | null;
+  cash_avg_cost?: number | null;
+  margin_share_count?: number | null;
+  margin_avg_cost?: number | null;
   position_markdown: string | null;
   facts_json: ChipFacts | null;
   history_json: HistoryDay[] | null;
@@ -333,6 +356,10 @@ export type AgentJob = {
   share_count?: number | null;
   avg_cost?: number | null;
   uses_margin?: boolean;
+  cash_share_count?: number | null;
+  cash_avg_cost?: number | null;
+  margin_share_count?: number | null;
+  margin_avg_cost?: number | null;
 };
 
 export type HoldingRecord = {
@@ -342,6 +369,10 @@ export type HoldingRecord = {
   shareCount: number;
   avgCost: number;
   usesMargin: boolean;
+  cashShareCount?: number;
+  cashAvgCost?: number;
+  marginShareCount?: number;
+  marginAvgCost?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -353,6 +384,10 @@ export type HoldingRow = {
   share_count: number;
   avg_cost: number;
   uses_margin?: boolean;
+  cash_share_count?: number | null;
+  cash_avg_cost?: number | null;
+  margin_share_count?: number | null;
+  margin_avg_cost?: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -374,6 +409,12 @@ export function rowToReport(row: ReportRow): ReportRecord {
     shareCount: row.share_count ?? undefined,
     avgCost: row.avg_cost ?? undefined,
     usesMargin: row.uses_margin ?? false,
+    cashShareCount: row.cash_share_count ?? undefined,
+    cashAvgCost:
+      row.cash_avg_cost != null ? Number(row.cash_avg_cost) : undefined,
+    marginShareCount: row.margin_share_count ?? undefined,
+    marginAvgCost:
+      row.margin_avg_cost != null ? Number(row.margin_avg_cost) : undefined,
     positionMarkdown: row.position_markdown ?? undefined,
     factsJson: row.facts_json ?? undefined,
     historyJson: row.history_json ?? undefined,
@@ -389,6 +430,12 @@ export function rowToHolding(row: HoldingRow): HoldingRecord {
     shareCount: row.share_count,
     avgCost: Number(row.avg_cost),
     usesMargin: row.uses_margin ?? false,
+    cashShareCount: row.cash_share_count ?? undefined,
+    cashAvgCost:
+      row.cash_avg_cost != null ? Number(row.cash_avg_cost) : undefined,
+    marginShareCount: row.margin_share_count ?? undefined,
+    marginAvgCost:
+      row.margin_avg_cost != null ? Number(row.margin_avg_cost) : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

@@ -324,6 +324,34 @@ function PositionSummarySection({ position }: { position: PositionSummary }) {
             <dd className="font-medium">{position.uses_margin ? "是" : "否"}</dd>
           </div>
         ) : null}
+        {position.priority_label ? (
+          <div>
+            <dt className="text-zinc-500">綜合優先序</dt>
+            <dd className="font-medium">{position.priority_label}</dd>
+          </div>
+        ) : null}
+        {position.cash ? (
+          <div>
+            <dt className="text-zinc-500">現股</dt>
+            <dd className="font-medium">
+              {position.cash.shares?.toLocaleString("zh-TW")} 股
+              {position.cash.pnl_bucket_label
+                ? ` · ${position.cash.pnl_bucket_label}`
+                : ""}
+            </dd>
+          </div>
+        ) : null}
+        {position.margin ? (
+          <div>
+            <dt className="text-zinc-500">融資腿</dt>
+            <dd className="font-medium">
+              {position.margin.shares?.toLocaleString("zh-TW")} 股
+              {position.margin.pnl_bucket_label
+                ? ` · ${position.margin.pnl_bucket_label}`
+                : ""}
+            </dd>
+          </div>
+        ) : null}
       </dl>
 
       {position.scenario_plan.length > 0 ? (

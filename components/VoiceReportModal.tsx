@@ -692,45 +692,68 @@ export function VoiceReportModal({
                 {draft.isHolding ? (
                   <>
                     <div className="flex justify-between gap-4">
-                      <dt className="text-zinc-500">持股股數</dt>
+                      <dt className="text-zinc-500">現股股數</dt>
                       <dd>
                         <input
                           type="number"
                           min={1}
                           step={1}
-                          value={draft.shareCount}
-                          onChange={(e) =>
-                            updateDraft("shareCount", e.target.value)
+                          value={
+                            draft.usesMargin ? "" : draft.shareCount
                           }
+                          onChange={(e) => {
+                            updateDraft("usesMargin", false);
+                            updateDraft("shareCount", e.target.value);
+                          }}
                           className="w-28 rounded border border-zinc-300 bg-white px-2 py-1 text-right text-sm dark:border-zinc-600 dark:bg-black"
                         />
                       </dd>
                     </div>
                     <div className="flex justify-between gap-4">
-                      <dt className="text-zinc-500">持股均價</dt>
+                      <dt className="text-zinc-500">現股均價</dt>
                       <dd>
                         <input
                           type="number"
                           min={0.01}
                           step={0.01}
-                          value={draft.avgCost}
-                          onChange={(e) =>
-                            updateDraft("avgCost", e.target.value)
-                          }
+                          value={draft.usesMargin ? "" : draft.avgCost}
+                          onChange={(e) => {
+                            updateDraft("usesMargin", false);
+                            updateDraft("avgCost", e.target.value);
+                          }}
                           className="w-28 rounded border border-zinc-300 bg-white px-2 py-1 text-right text-sm dark:border-zinc-600 dark:bg-black"
                         />
                       </dd>
                     </div>
                     <div className="flex justify-between gap-4">
-                      <dt className="text-zinc-500">使用融資</dt>
+                      <dt className="text-zinc-500">融資股數</dt>
                       <dd>
                         <input
-                          type="checkbox"
-                          checked={Boolean(draft.usesMargin)}
-                          onChange={(e) =>
-                            updateDraft("usesMargin", e.target.checked)
-                          }
-                          className="h-4 w-4"
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={draft.usesMargin ? draft.shareCount : ""}
+                          onChange={(e) => {
+                            updateDraft("usesMargin", true);
+                            updateDraft("shareCount", e.target.value);
+                          }}
+                          className="w-28 rounded border border-zinc-300 bg-white px-2 py-1 text-right text-sm dark:border-zinc-600 dark:bg-black"
+                        />
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-zinc-500">融資均價</dt>
+                      <dd>
+                        <input
+                          type="number"
+                          min={0.01}
+                          step={0.01}
+                          value={draft.usesMargin ? draft.avgCost : ""}
+                          onChange={(e) => {
+                            updateDraft("usesMargin", true);
+                            updateDraft("avgCost", e.target.value);
+                          }}
+                          className="w-28 rounded border border-zinc-300 bg-white px-2 py-1 text-right text-sm dark:border-zinc-600 dark:bg-black"
                         />
                       </dd>
                     </div>
