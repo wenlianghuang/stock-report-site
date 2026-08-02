@@ -88,6 +88,23 @@ function RankTable({
   );
 }
 
+function AlignChip({ label }: { label?: string | null }) {
+  if (!label || label === "unavailable") {
+    return <span className="text-zinc-400">—</span>;
+  }
+  const tone =
+    label === "一致"
+      ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+      : label === "背離"
+        ? "bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+        : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300";
+  return (
+    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${tone}`}>
+      {label}
+    </span>
+  );
+}
+
 export function TwMarketWeeklyDashboard() {
   const [windowInfo, setWindowInfo] = useState<ResolveWindow | null>(null);
   const [records, setRecords] = useState<MarketWeeklyRecord[]>([]);
@@ -223,6 +240,15 @@ export function TwMarketWeeklyDashboard() {
   const summary: MarketWeekSummary | undefined = active?.summaryJson;
   const marketReturn =
     summary?.market?.week_return_pct ?? facts?.market?.week_return_pct;
+  const us = summary?.us ?? facts?.us;
+  const ixicRet =
+    us?.ixic_week_return_pct ?? us?.indices?.IXIC?.week_return_pct ?? null;
+  const soxRet =
+    us?.sox_week_return_pct ?? us?.indices?.SOX?.week_return_pct ?? null;
+  const ixicAlign =
+    us?.ixic_vs_taiex ?? us?.alignment?.ixic_vs_taiex ?? null;
+  const soxAlign =
+    us?.sox_vs_tw_semi ?? us?.alignment?.sox_vs_tw_semi ?? null;
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
@@ -233,7 +259,7 @@ export function TwMarketWeeklyDashboard() {
               台股市場週報
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
-              大盤 + 權值結構 + 證交所類股強弱。週五 17:30（台北）前對應上週，之後才是本週。
+              大盤 + 權值結構 + 證交所類股強弱 + 那指／費半對照。週五 17:30（台北）前對應上週，之後才是本週。
             </p>
             {windowInfo ? (
               <p className="mt-3 text-sm text-zinc-700 dark:text-zinc-300">
@@ -296,6 +322,32 @@ export function TwMarketWeeklyDashboard() {
                 ) : null}
               </div>
               <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+                <h3 className="text-sm font-semibold">美股週對照</h3>
+                {us?.available === false && !ixicRet && !soxRet ? (
+                  <p className="mt-3 text-sm text-zinc-500">本週美股指數資料不足</p>
+                ) : (
+                  <dl className="mt-3 space-y-2 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="text-zinc-600 dark:text-zinc-400">那斯達克</dt>
+                      <dd className="flex items-center gap-2 tabular-nums">
+                        {formatPct(typeof ixicRet === "number" ? ixicRet : null)}
+                        <AlignChip label={ixicAlign} />
+                      </dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="text-zinc-600 dark:text-zinc-400">費半</dt>
+                      <dd className="flex items-center gap-2 tabular-nums">
+                        {formatPct(typeof soxRet === "number" ? soxRet : null)}
+                        <AlignChip label={soxAlign} />
+                      </dd>
+                    </div>
+                    <p className="pt-1 text-xs text-zinc-500">
+                      chip：那指 vs 大盤／費半 vs 半導體類
+                    </p>
+                  </dl>
+                )}
+              </div>
+              <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 lg:col-span-2">
                 <h3 className="text-sm font-semibold">歷史週報</h3>
                 <ul className="mt-3 max-h-40 space-y-1 overflow-y-auto text-sm">
                   {records.map((item) => (

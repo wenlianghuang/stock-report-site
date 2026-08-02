@@ -515,6 +515,41 @@ export type MarketWeekNewsItem = {
   publisher?: string | null;
 };
 
+export type MarketWeekUs = {
+  available?: boolean;
+  source?: string;
+  calendar_start?: string | null;
+  calendar_end?: string | null;
+  indices?: {
+    IXIC?: {
+      symbol?: string;
+      name?: string;
+      week_return_pct?: number | null;
+      session_count?: number;
+    } | null;
+    SOX?: {
+      symbol?: string;
+      name?: string;
+      week_return_pct?: number | null;
+      session_count?: number;
+    } | null;
+  };
+  alignment?: {
+    ixic_vs_taiex?: string;
+    sox_vs_tw_semi?: string;
+  };
+  gaps?: {
+    ixic_minus_taiex_pct?: number | null;
+    sox_minus_tw_semi_pct?: number | null;
+  };
+  tw_semi_week_return_pct?: number | null;
+  /** summary-only flattened fields */
+  ixic_week_return_pct?: number | null;
+  sox_week_return_pct?: number | null;
+  ixic_vs_taiex?: string;
+  sox_vs_tw_semi?: string;
+};
+
 export type MarketWeekFacts = {
   week_start: string;
   week_end: string;
@@ -534,7 +569,9 @@ export type MarketWeekFacts = {
     universe?: string;
     strong?: MarketWeekSector[];
     weak?: MarketWeekSector[];
+    semiconductor_week_return_pct?: number | null;
   };
+  us?: MarketWeekUs;
   anchors?: string[];
   news_titles?: string[];
   news_items?: MarketWeekNewsItem[];
@@ -559,6 +596,7 @@ export type MarketWeekSummary = {
     strong?: MarketWeekSector[];
     weak?: MarketWeekSector[];
   };
+  us?: MarketWeekUs;
   scenarios?: string;
   cross?: string;
   watch?: string;
