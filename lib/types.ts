@@ -490,3 +490,127 @@ export function portfolioRecordToResult(
     generated_via: record.generatedVia ?? "rules",
   };
 }
+
+export type MarketWeekLeader = {
+  stock_id: string;
+  name: string;
+  week_return_pct?: number;
+  excess_vs_taiex_pct?: number | null;
+  contribution_score?: number | null;
+};
+
+export type MarketWeekSector = {
+  index_id?: string;
+  name: string;
+  week_return_pct?: number;
+  excess_vs_taiex_pct?: number | null;
+};
+
+export type MarketWeekFacts = {
+  week_start: string;
+  week_end: string;
+  trading_days: string[];
+  resolved_as_of?: string;
+  cutover_applied?: boolean;
+  market?: {
+    week_return_pct?: number | null;
+    last_close?: number | null;
+    close_in_week_range_pct?: number | null;
+  };
+  leaders?: {
+    top?: MarketWeekLeader[];
+    bottom?: MarketWeekLeader[];
+  };
+  sectors?: {
+    universe?: string;
+    strong?: MarketWeekSector[];
+    weak?: MarketWeekSector[];
+  };
+  anchors?: string[];
+  news_titles?: string[];
+};
+
+export type MarketWeekSummary = {
+  version?: number;
+  kind?: string;
+  week_start?: string;
+  week_end?: string;
+  market?: {
+    week_return_pct?: number | null;
+    tone?: string;
+    last_close?: number | null;
+    headline?: string;
+  };
+  leaders?: {
+    top?: MarketWeekLeader[];
+    bottom?: MarketWeekLeader[];
+  };
+  sectors?: {
+    strong?: MarketWeekSector[];
+    weak?: MarketWeekSector[];
+  };
+  scenarios?: string;
+  watch?: string;
+  anchors?: string[];
+};
+
+export type MarketWeeklyJob = {
+  id: string;
+  status: string;
+  week_start?: string | null;
+  week_end?: string | null;
+  as_of?: string | null;
+  error?: string | null;
+  facts?: MarketWeekFacts | null;
+  summary?: MarketWeekSummary | null;
+  markdown?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type MarketWeeklyRecord = {
+  id: string;
+  userId: string;
+  agentJobId: string;
+  status: "queued" | "gating" | "done" | "failed";
+  weekStart?: string;
+  weekEnd?: string;
+  error?: string;
+  markdown?: string;
+  factsJson?: MarketWeekFacts;
+  summaryJson?: MarketWeekSummary;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MarketWeeklyRow = {
+  id: string;
+  user_id: string;
+  agent_job_id: string;
+  status: MarketWeeklyRecord["status"];
+  week_start: string | null;
+  week_end: string | null;
+  error: string | null;
+  markdown: string | null;
+  facts_json: MarketWeekFacts | null;
+  summary_json: MarketWeekSummary | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export function rowToMarketWeekly(row: MarketWeeklyRow): MarketWeeklyRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    agentJobId: row.agent_job_id,
+    status: row.status,
+    weekStart: row.week_start ?? undefined,
+    weekEnd: row.week_end ?? undefined,
+    error: row.error ?? undefined,
+    markdown: row.markdown ?? undefined,
+    factsJson: row.facts_json ?? undefined,
+    summaryJson: row.summary_json ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}

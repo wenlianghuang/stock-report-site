@@ -199,3 +199,28 @@ create trigger portfolios_updated_at
   before update on public.portfolios
   for each row
   execute function public.set_portfolios_updated_at();
+
+-- Market weekly reports (see migrations/20260802_create_market_weeklies_table.sql)
+create table if not exists public.market_weeklies (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  agent_job_id text not null,
+  status text not null default 'queued'
+    check (status in ('queued', 'gating', 'done', 'failed')),
+  week_start text,
+  week_end text,
+  error text,
+  markdown text,
+  facts_json jsonb,
+  summary_json jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists market_weeklies_user_id_created_at_idx
+  on public.market_weeklies (user_id, created_at desc);
+
+create index if not exists market_weeklies_user_id_week_end_idx
+  on public.market_weeklies (user_id, week_end);
+
+alter table public.market_weeklies enable row level security;

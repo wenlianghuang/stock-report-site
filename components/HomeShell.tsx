@@ -5,10 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { TwStockDashboard } from "@/components/TwStockDashboard";
 import { TwPortfolioDashboard } from "@/components/TwPortfolioDashboard";
+import { TwMarketWeeklyDashboard } from "@/components/TwMarketWeeklyDashboard";
 import { UsStockDashboard } from "@/components/UsStockDashboard";
 
 type MarketTab = "tw" | "us";
-type TwView = "chip" | "portfolio";
+type TwView = "chip" | "portfolio" | "weekly";
 
 function tabClass(active: boolean): string {
   return active
@@ -16,12 +17,17 @@ function tabClass(active: boolean): string {
     : "text-zinc-600 hover:bg-white hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100";
 }
 
+function parseTwView(raw: string | null): TwView {
+  if (raw === "portfolio") return "portfolio";
+  if (raw === "weekly") return "weekly";
+  return "chip";
+}
+
 export function HomeShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const market: MarketTab = searchParams.get("market") === "us" ? "us" : "tw";
-  const twView: TwView =
-    searchParams.get("view") === "portfolio" ? "portfolio" : "chip";
+  const twView: TwView = parseTwView(searchParams.get("view"));
   const [loggingOut, setLoggingOut] = useState(false);
 
   function selectMarket(next: MarketTab) {
@@ -29,14 +35,21 @@ export function HomeShell() {
   }
 
   function selectTwView(next: TwView) {
-    router.replace(next === "portfolio" ? "/?view=portfolio" : "/");
+    if (next === "portfolio") {
+      router.replace("/?view=portfolio");
+      return;
+    }
+    if (next === "weekly") {
+      router.replace("/?view=weekly");
+      return;
+    }
+    router.replace("/");
   }
 
   async function logout() {
     if (loggingOut) {
       return;
     }
-    // Keep the overlay up until the browser unloads this page for /login.
     setLoggingOut(true);
     try {
       await fetch("/api/auth/logout", { method: "POST" });
@@ -45,6 +58,9 @@ export function HomeShell() {
     }
     window.location.href = "/login";
   }
+
+  const wide =
+    market === "tw" && (twView === "portfolio" || twView === "weekly");
 
   return (
     <div className="min-h-full bg-zinc-100 dark:bg-zinc-950">
@@ -91,7 +107,7 @@ export function HomeShell() {
           {market === "tw" ? (
             <nav
               aria-label="台股功能分類"
-              className="inline-flex w-fit rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900"
+              className="inline-flex w-fit flex-wrap rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900"
             >
               <button
                 type="button"
@@ -107,20 +123,27 @@ export function HomeShell() {
               >
                 選股組合建議
               </button>
+              <button
+                type="button"
+                onClick={() => selectTwView("weekly")}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(twView === "weekly")}`}
+              >
+                市場週報
+              </button>
             </nav>
           ) : null}
         </div>
       </header>
 
       <main
-        className={`mx-auto w-full px-6 py-8 ${
-          market === "tw" && twView === "portfolio" ? "max-w-6xl" : "max-w-5xl"
-        }`}
+        className={`mx-auto w-full px-6 py-8 ${wide ? "max-w-6xl" : "max-w-5xl"}`}
       >
         {market === "us" ? (
           <UsStockDashboard />
         ) : twView === "portfolio" ? (
           <TwPortfolioDashboard />
+        ) : twView === "weekly" ? (
+          <TwMarketWeeklyDashboard />
         ) : (
           <TwStockDashboard />
         )}

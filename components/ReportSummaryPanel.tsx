@@ -424,7 +424,7 @@ function PositionSummarySection({ position }: { position: PositionSummary }) {
                 <dd className="font-medium">
                   {position.margin_call_price.toFixed(2)}
                   {position.distance_to_call_price_pct != null
-                    ? `（現價 ${formatPct(position.distance_to_call_price_pct)}）`
+                    ? `（現價相對追繳價 ${formatPct(position.distance_to_call_price_pct)}）`
                     : ""}
                 </dd>
               </div>

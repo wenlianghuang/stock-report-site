@@ -4,6 +4,10 @@ import type {
   HistoryDay,
   HoldingRecord,
   HoldingRow,
+  MarketWeekFacts,
+  MarketWeekSummary,
+  MarketWeeklyRecord,
+  MarketWeeklyRow,
   PortfolioFacts,
   PortfolioRecord,
   PortfolioRow,
@@ -11,7 +15,12 @@ import type {
   ReportRow,
   ReportSummaryJson,
 } from "./types";
-import { rowToHolding, rowToPortfolio, rowToReport } from "./types";
+import {
+  rowToHolding,
+  rowToMarketWeekly,
+  rowToPortfolio,
+  rowToReport,
+} from "./types";
 
 export async function createReport(input: {
   userId: string;
@@ -445,4 +454,126 @@ export function isValidPortfolioThemes(values: unknown): values is string[] {
 
 export function isValidPortfolioAmount(value: number): boolean {
   return Number.isInteger(value) && value >= 50_000;
+}
+
+export async function createMarketWeekly(input: {
+  userId: string;
+  agentJobId: string;
+  weekStart?: string;
+  weekEnd?: string;
+  status?: MarketWeeklyRecord["status"];
+  markdown?: string | null;
+  factsJson?: MarketWeekFacts | null;
+  summaryJson?: MarketWeekSummary | null;
+}): Promise<MarketWeeklyRecord> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("market_weeklies")
+    .insert({
+      user_id: input.userId,
+      agent_job_id: input.agentJobId,
+      status: input.status ?? "queued",
+      ...(input.weekStart ? { week_start: input.weekStart } : {}),
+      ...(input.weekEnd ? { week_end: input.weekEnd } : {}),
+      ...(input.markdown !== undefined ? { markdown: input.markdown } : {}),
+      ...(input.factsJson !== undefined ? { facts_json: input.factsJson } : {}),
+      ...(input.summaryJson !== undefined
+        ? { summary_json: input.summaryJson }
+        : {}),
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "無法建立市場週報紀錄");
+  }
+
+  return rowToMarketWeekly(data as MarketWeeklyRow);
+}
+
+export async function updateMarketWeekly(
+  id: string,
+  patch: Partial<
+    Pick<
+      MarketWeeklyRecord,
+      | "status"
+      | "weekStart"
+      | "weekEnd"
+      | "error"
+      | "markdown"
+      | "factsJson"
+      | "summaryJson"
+    >
+  >,
+): Promise<MarketWeeklyRecord | undefined> {
+  const supabase = await createClient();
+  const payload: Record<string, unknown> = {};
+  if (patch.status !== undefined) payload.status = patch.status;
+  if (patch.weekStart !== undefined) payload.week_start = patch.weekStart;
+  if (patch.weekEnd !== undefined) payload.week_end = patch.weekEnd;
+  if (patch.error !== undefined) payload.error = patch.error;
+  if (patch.markdown !== undefined) payload.markdown = patch.markdown;
+  if (patch.factsJson !== undefined) payload.facts_json = patch.factsJson;
+  if (patch.summaryJson !== undefined) payload.summary_json = patch.summaryJson;
+
+  const { data, error } = await supabase
+    .from("market_weeklies")
+    .update(payload)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    return undefined;
+  }
+  return rowToMarketWeekly(data as MarketWeeklyRow);
+}
+
+export async function findMarketWeeklyById(
+  id: string,
+): Promise<MarketWeeklyRecord | undefined> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("market_weeklies")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !data) {
+    return undefined;
+  }
+  return rowToMarketWeekly(data as MarketWeeklyRow);
+}
+
+export async function listMarketWeekliesForUser(
+  userId: string,
+): Promise<MarketWeeklyRecord[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("market_weeklies")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error || !data) {
+    return [];
+  }
+  return (data as MarketWeeklyRow[]).map(rowToMarketWeekly);
+}
+
+export async function deleteMarketWeekly(
+  id: string,
+  userId: string,
+): Promise<boolean> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("market_weeklies")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId);
+  return !error;
+}
+
+export function isValidMarketWeeklyStatus(
+  value: string,
+): value is MarketWeeklyRecord["status"] {
+  return ["queued", "gating", "done", "failed"].includes(value);
 }
