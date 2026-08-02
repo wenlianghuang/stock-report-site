@@ -94,6 +94,7 @@ export function TwMarketWeeklyDashboard() {
   const [active, setActive] = useState<MarketWeeklyRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadList = useCallback(async () => {
@@ -183,6 +184,41 @@ export function TwMarketWeeklyDashboard() {
     }
   }
 
+  async function onDelete(record: MarketWeeklyRecord) {
+    const label =
+      record.weekStart && record.weekEnd
+        ? `${record.weekStart}～${record.weekEnd}`
+        : "此筆";
+    if (!window.confirm(`確定要刪除 ${label} 的市場週報嗎？`)) {
+      return;
+    }
+
+    setError(null);
+    setDeletingId(record.id);
+    try {
+      const response = await fetch(`/api/market-weekly/${record.id}`, {
+        method: "DELETE",
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error || "刪除失敗");
+      }
+      setRecords((prev) => {
+        const next = prev.filter((item) => item.id !== record.id);
+        return next;
+      });
+      setActive((current) => {
+        if (current?.id !== record.id) return current;
+        const remaining = records.filter((item) => item.id !== record.id);
+        return remaining[0] ?? null;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "刪除失敗");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   const facts: MarketWeekFacts | undefined = active?.factsJson;
   const summary: MarketWeekSummary | undefined = active?.summaryJson;
   const marketReturn =
@@ -263,18 +299,29 @@ export function TwMarketWeeklyDashboard() {
                 <h3 className="text-sm font-semibold">歷史週報</h3>
                 <ul className="mt-3 max-h-40 space-y-1 overflow-y-auto text-sm">
                   {records.map((item) => (
-                    <li key={item.id}>
+                    <li
+                      key={item.id}
+                      className={`flex items-center gap-2 rounded-md px-2 py-1.5 ${
+                        active.id === item.id
+                          ? "bg-zinc-100 dark:bg-zinc-800"
+                          : "hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+                      }`}
+                    >
                       <button
                         type="button"
                         onClick={() => setActive(item)}
-                        className={`w-full rounded-md px-2 py-1.5 text-left ${
-                          active.id === item.id
-                            ? "bg-zinc-100 dark:bg-zinc-800"
-                            : "hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
-                        }`}
+                        className="min-w-0 flex-1 text-left"
                       >
                         {item.weekStart}～{item.weekEnd}{" "}
                         <span className="text-zinc-500">({item.status})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void onDelete(item)}
+                        disabled={deletingId === item.id || generating}
+                        className="shrink-0 text-xs text-red-600 hover:text-red-700 disabled:opacity-60 dark:text-red-400 dark:hover:text-red-300"
+                      >
+                        {deletingId === item.id ? "刪除中…" : "刪除"}
                       </button>
                     </li>
                   ))}
