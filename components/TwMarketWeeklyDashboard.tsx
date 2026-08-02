@@ -353,6 +353,37 @@ function toSectorExcessRows(rows: MarketWeekSector[]): Array<{ label: string; ex
     }));
 }
 
+function extractMarkdownSection(markdown: string, keywords: string[]): string {
+  const lines = markdown.split(/\r?\n/);
+  let start = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (
+      keywords.some((kw) => line.includes(kw)) &&
+      (/^#{1,3}\s/.test(line) || /[一二三四五六七]/.test(line.slice(0, 8)))
+    ) {
+      start = i;
+      break;
+    }
+  }
+  if (start < 0) {
+    start = lines.findIndex((line) => keywords.some((kw) => line.includes(kw)));
+  }
+  if (start < 0) return "";
+  const chunks: string[] = [];
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    const isMajor =
+      /^##?\s*[一二三四五六七]、/.test(line) ||
+      (/^##\s+/.test(line) &&
+        !line.startsWith("###") &&
+        /(大盤|權值|類股|交叉|下週|觀察|免責)/.test(line));
+    if (isMajor) break;
+    chunks.push(line);
+  }
+  return chunks.join("\n").trim();
+}
+
 export function TwMarketWeeklyDashboard() {
   const [windowInfo, setWindowInfo] = useState<ResolveWindow | null>(null);
   const [records, setRecords] = useState<MarketWeeklyRecord[]>([]);
@@ -539,6 +570,17 @@ export function TwMarketWeeklyDashboard() {
     return fromItems;
   }, [summary, facts]);
 
+  const scenariosText = useMemo(() => {
+    const fromSummary = (summary?.scenarios || "").trim();
+    if (fromSummary.length >= 200) return fromSummary;
+    const fromMd = active?.markdown
+      ? extractMarkdownSection(active.markdown, ["下週", "情境"])
+      : "";
+    return (fromMd || fromSummary).trim();
+  }, [summary?.scenarios, active?.markdown]);
+
+  const watchText = (summary?.watch || "").trim();
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
       <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
@@ -711,6 +753,32 @@ export function TwMarketWeeklyDashboard() {
                 <RankTable title="強勢類股（TWSE）" kind="sector" rows={sectorsStrong} />
                 <RankTable title="弱勢類股（TWSE）" kind="sector" rows={sectorsWeak} />
               </section>
+
+              {scenariosText ? (
+                <section className="rounded-2xl border border-zinc-900/10 bg-white p-5 dark:border-zinc-100/10 dark:bg-zinc-900">
+                  <div className="flex flex-wrap items-end justify-between gap-2">
+                    <div>
+                      <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+                        下週情境／週一決策
+                      </h3>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        假日無法交易時最需要看的段落：基準／次可能／尾部、否決條件與開盤檢核。
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
+                    <MarkdownReport markdown={scenariosText} />
+                  </div>
+                  {watchText ? (
+                    <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm dark:border-zinc-700 dark:bg-zinc-800/50">
+                      <p className="text-xs font-medium text-zinc-500">觀察重點</p>
+                      <p className="mt-1 leading-relaxed text-zinc-700 dark:text-zinc-300">
+                        {watchText}
+                      </p>
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
 
               {newsTitles.length > 0 ? (
                 <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">

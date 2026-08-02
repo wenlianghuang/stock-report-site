@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, useState, useTransition } from "react";
+import { FormEvent, useState } from "react";
 import { LoadingOverlay } from "@/components/LoadingOverlay";
 
 type AuthFormProps = {
@@ -10,8 +9,6 @@ type AuthFormProps = {
 };
 
 export function AuthForm({ mode }: AuthFormProps) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -49,13 +46,10 @@ export function AuthForm({ mode }: AuthFormProps) {
         return;
       }
 
-      // Keep the overlay up during navigation: isPending stays true until the
-      // destination route's server components resolve and the view commits.
-      // Deliberately do NOT reset submitting on success so the overlay never
-      // flashes back to the login form before the home page takes over.
-      startTransition(() => {
-        router.replace("/");
-      });
+      // Hard navigate as soon as the session cookie is set. Do not wait for the
+      // home RSC tree / data fetches — those stream in on the destination page.
+      // Keep submitting=true so the overlay stays until the document unloads.
+      window.location.replace("/");
     } catch (error) {
       const message = error instanceof Error ? error.message : "網路錯誤，請稍後再試";
       setError(message);
@@ -63,12 +57,12 @@ export function AuthForm({ mode }: AuthFormProps) {
     }
   }
 
-  const busy = submitting || isPending;
-  const overlayLabel = mode === "login" ? "登入成功，正在為您載入首頁…" : "註冊成功，正在為您載入首頁…";
+  const overlayLabel =
+    mode === "login" ? "登入成功，正在進入首頁…" : "註冊成功，正在進入首頁…";
 
   return (
     <>
-      {busy ? <LoadingOverlay label={overlayLabel} /> : null}
+      {submitting ? <LoadingOverlay label={overlayLabel} /> : null}
       <form onSubmit={onSubmit} className="flex w-full max-w-md flex-col gap-4">
       <div>
         <label htmlFor="email" className="mb-1 block text-sm font-medium">
@@ -101,10 +95,10 @@ export function AuthForm({ mode }: AuthFormProps) {
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <button
         type="submit"
-        disabled={busy}
+        disabled={submitting}
         className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
       >
-        {busy ? "處理中…" : mode === "login" ? "登入" : "註冊"}
+        {submitting ? "處理中…" : mode === "login" ? "登入" : "註冊"}
       </button>
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
         {mode === "login" ? "還沒有帳號？" : "已有帳號？"}
