@@ -506,6 +506,15 @@ export type MarketWeekSector = {
   excess_vs_taiex_pct?: number | null;
 };
 
+export type MarketWeekNewsItem = {
+  title: string;
+  stock_id?: string | null;
+  name?: string | null;
+  related_sector?: string | null;
+  date?: string | null;
+  publisher?: string | null;
+};
+
 export type MarketWeekFacts = {
   week_start: string;
   week_end: string;
@@ -528,6 +537,7 @@ export type MarketWeekFacts = {
   };
   anchors?: string[];
   news_titles?: string[];
+  news_items?: MarketWeekNewsItem[];
 };
 
 export type MarketWeekSummary = {
@@ -550,8 +560,11 @@ export type MarketWeekSummary = {
     weak?: MarketWeekSector[];
   };
   scenarios?: string;
+  cross?: string;
   watch?: string;
   anchors?: string[];
+  news_titles?: string[];
+  news_items?: MarketWeekNewsItem[];
 };
 
 export type MarketWeeklyJob = {

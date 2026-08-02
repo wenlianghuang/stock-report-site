@@ -305,6 +305,45 @@ export function TwMarketWeeklyDashboard() {
             <p className="text-sm text-zinc-500">尚未有市場週報，請先產生一週。</p>
           )}
 
+          {(() => {
+            const fromSummary = summary?.news_titles ?? [];
+            const fromFacts = facts?.news_titles ?? [];
+            const fromItems = (
+              summary?.news_items ??
+              facts?.news_items ??
+              []
+            )
+              .map((item) => item.title)
+              .filter((title): title is string => Boolean(title));
+            const newsTitles =
+              fromSummary.length > 0
+                ? fromSummary
+                : fromFacts.length > 0
+                  ? fromFacts
+                  : fromItems;
+            if (!active || newsTitles.length === 0) {
+              return null;
+            }
+            return (
+              <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+                <h3 className="text-sm font-semibold">本週對帳新聞</h3>
+                <p className="mt-1 text-xs text-zinc-500">
+                  交叉解讀應原文引用下列標題，並以大盤／權值／類股數字判定一致或背離。
+                </p>
+                <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm text-zinc-700 dark:text-zinc-300">
+                  {newsTitles.slice(0, 12).map((title) => (
+                    <li key={title}>{title}</li>
+                  ))}
+                </ul>
+                {summary?.cross ? (
+                  <p className="mt-3 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+                    {summary.cross}
+                  </p>
+                ) : null}
+              </section>
+            );
+          })()}
+
           {active?.markdown ? (
             <section className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
               <h3 className="mb-3 text-sm font-semibold">完整週報</h3>
