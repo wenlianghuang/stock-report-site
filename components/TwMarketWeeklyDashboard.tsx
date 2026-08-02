@@ -122,23 +122,34 @@ function ExcessMiniBar({ value }: { value?: number | null }) {
   if (value == null || Number.isNaN(value)) {
     return <span className="text-zinc-400">—</span>;
   }
-  const abs = Math.min(Math.abs(value), 12);
-  const width = `${(abs / 12) * 100}%`;
+  // Each side of center is 50% of the track; never overflow into the label.
+  const halfWidthPct = Math.min(Math.abs(value) / 12, 1) * 50;
   return (
-    <div className="flex min-w-[7rem] items-center gap-2">
-      <span className={`w-14 shrink-0 text-right tabular-nums ${pctClass(value)}`}>
+    <div className="flex min-w-[10rem] items-center gap-2.5">
+      <span
+        className={`w-[4.5rem] shrink-0 text-right tabular-nums ${pctClass(value)}`}
+      >
         {formatPct(value)}
       </span>
-      <div className="relative h-1.5 flex-1 rounded-full bg-zinc-100 dark:bg-zinc-800">
-        <div
-          className="absolute top-0 h-full rounded-full"
-          style={{
-            width,
-            left: value >= 0 ? "50%" : `calc(50% - ${width})`,
-            backgroundColor: barFill(value),
-          }}
-        />
-        <div className="absolute left-1/2 top-0 h-full w-px bg-zinc-300 dark:bg-zinc-600" />
+      <div className="relative h-1.5 min-w-[4.5rem] flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+        {value >= 0 ? (
+          <div
+            className="absolute top-0 left-1/2 h-full rounded-r-full"
+            style={{
+              width: `${halfWidthPct}%`,
+              backgroundColor: barFill(value),
+            }}
+          />
+        ) : (
+          <div
+            className="absolute top-0 right-1/2 h-full rounded-l-full"
+            style={{
+              width: `${halfWidthPct}%`,
+              backgroundColor: barFill(value),
+            }}
+          />
+        )}
+        <div className="pointer-events-none absolute left-1/2 top-0 h-full w-px -translate-x-px bg-zinc-300 dark:bg-zinc-600" />
       </div>
     </div>
   );
