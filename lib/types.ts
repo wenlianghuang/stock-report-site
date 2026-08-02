@@ -559,6 +559,9 @@ export type MarketWeekFacts = {
   market?: {
     week_return_pct?: number | null;
     last_close?: number | null;
+    first_close?: number | null;
+    week_high?: number | null;
+    week_low?: number | null;
     close_in_week_range_pct?: number | null;
   };
   leaders?: {
