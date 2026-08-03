@@ -2,6 +2,7 @@ import type {
   AgentJob,
   ChipFacts,
   HistoryDay,
+  MarketDailyJob,
   MarketWeeklyJob,
   PortfolioJob,
   PortfolioProfile,
@@ -499,5 +500,96 @@ export async function getMarketWeeklyJob(
     throw new Error(detail || `Agent API error ${response.status}`);
   }
   const payload = (await response.json()) as { job: MarketWeeklyJob };
+  return payload.job;
+}
+
+export async function resolveMarketDaily(input?: {
+  asOf?: string;
+  tradeDate?: string;
+}): Promise<{
+  trade_date: string;
+  for_session: string;
+  prior_trade_date: string | null;
+  lookback_days: string[];
+  cutover_applied: boolean;
+  resolved_as_of: string;
+}> {
+  const params = new URLSearchParams();
+  if (input?.asOf) params.set("as_of", input.asOf);
+  if (input?.tradeDate) params.set("trade_date", input.tradeDate);
+  const qs = params.toString();
+  const response = await fetch(
+    `${baseUrl()}/market-daily/resolve${qs ? `?${qs}` : ""}`,
+    { headers: agentHeaders(), cache: "no-store" },
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as {
+    window: {
+      trade_date: string;
+      for_session: string;
+      prior_trade_date: string | null;
+      lookback_days: string[];
+      cutover_applied: boolean;
+      resolved_as_of: string;
+    };
+  };
+  return payload.window;
+}
+
+export async function createMarketDailyJob(input?: {
+  asOf?: string;
+  tradeDate?: string;
+  force?: boolean;
+  skipFetch?: boolean;
+  skipUs?: boolean;
+}): Promise<MarketDailyJob> {
+  const body: Record<string, unknown> = {};
+  if (input?.asOf) body.as_of = input.asOf;
+  if (input?.tradeDate) body.trade_date = input.tradeDate;
+  if (input?.force) body.force = true;
+  if (input?.skipFetch) body.skip_fetch = true;
+  if (input?.skipUs) body.skip_us = true;
+
+  const response = await fetch(`${baseUrl()}/market-daily/jobs`, {
+    method: "POST",
+    headers: agentHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      detail = data.detail ?? "";
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail || `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as { job: MarketDailyJob };
+  return payload.job;
+}
+
+export async function getMarketDailyJob(
+  jobId: string,
+): Promise<MarketDailyJob> {
+  const response = await fetch(`${baseUrl()}/market-daily/jobs/${jobId}`, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      detail = data.detail ?? "";
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail || `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as { job: MarketDailyJob };
   return payload.job;
 }

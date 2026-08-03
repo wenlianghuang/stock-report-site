@@ -4,6 +4,10 @@ import type {
   HistoryDay,
   HoldingRecord,
   HoldingRow,
+  MarketDayFacts,
+  MarketDaySummary,
+  MarketDailyRecord,
+  MarketDailyRow,
   MarketWeekFacts,
   MarketWeekSummary,
   MarketWeeklyRecord,
@@ -17,6 +21,7 @@ import type {
 } from "./types";
 import {
   rowToHolding,
+  rowToMarketDaily,
   rowToMarketWeekly,
   rowToPortfolio,
   rowToReport,
@@ -575,5 +580,127 @@ export async function deleteMarketWeekly(
 export function isValidMarketWeeklyStatus(
   value: string,
 ): value is MarketWeeklyRecord["status"] {
+  return ["queued", "gating", "done", "failed"].includes(value);
+}
+
+export async function createMarketDaily(input: {
+  userId: string;
+  agentJobId: string;
+  tradeDate?: string;
+  forSession?: string;
+  status?: MarketDailyRecord["status"];
+  markdown?: string | null;
+  factsJson?: MarketDayFacts | null;
+  summaryJson?: MarketDaySummary | null;
+}): Promise<MarketDailyRecord> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("market_dailies")
+    .insert({
+      user_id: input.userId,
+      agent_job_id: input.agentJobId,
+      status: input.status ?? "queued",
+      ...(input.tradeDate ? { trade_date: input.tradeDate } : {}),
+      ...(input.forSession ? { for_session: input.forSession } : {}),
+      ...(input.markdown !== undefined ? { markdown: input.markdown } : {}),
+      ...(input.factsJson !== undefined ? { facts_json: input.factsJson } : {}),
+      ...(input.summaryJson !== undefined
+        ? { summary_json: input.summaryJson }
+        : {}),
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "無法建立市場日報紀錄");
+  }
+
+  return rowToMarketDaily(data as MarketDailyRow);
+}
+
+export async function updateMarketDaily(
+  id: string,
+  patch: Partial<
+    Pick<
+      MarketDailyRecord,
+      | "status"
+      | "tradeDate"
+      | "forSession"
+      | "error"
+      | "markdown"
+      | "factsJson"
+      | "summaryJson"
+    >
+  >,
+): Promise<MarketDailyRecord | undefined> {
+  const supabase = await createClient();
+  const payload: Record<string, unknown> = {};
+  if (patch.status !== undefined) payload.status = patch.status;
+  if (patch.tradeDate !== undefined) payload.trade_date = patch.tradeDate;
+  if (patch.forSession !== undefined) payload.for_session = patch.forSession;
+  if (patch.error !== undefined) payload.error = patch.error;
+  if (patch.markdown !== undefined) payload.markdown = patch.markdown;
+  if (patch.factsJson !== undefined) payload.facts_json = patch.factsJson;
+  if (patch.summaryJson !== undefined) payload.summary_json = patch.summaryJson;
+
+  const { data, error } = await supabase
+    .from("market_dailies")
+    .update(payload)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    return undefined;
+  }
+  return rowToMarketDaily(data as MarketDailyRow);
+}
+
+export async function findMarketDailyById(
+  id: string,
+): Promise<MarketDailyRecord | undefined> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("market_dailies")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !data) {
+    return undefined;
+  }
+  return rowToMarketDaily(data as MarketDailyRow);
+}
+
+export async function listMarketDailiesForUser(
+  userId: string,
+): Promise<MarketDailyRecord[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("market_dailies")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error || !data) {
+    return [];
+  }
+  return (data as MarketDailyRow[]).map(rowToMarketDaily);
+}
+
+export async function deleteMarketDaily(
+  id: string,
+  userId: string,
+): Promise<boolean> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("market_dailies")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId);
+  return !error;
+}
+
+export function isValidMarketDailyStatus(
+  value: string,
+): value is MarketDailyRecord["status"] {
   return ["queued", "gating", "done", "failed"].includes(value);
 }

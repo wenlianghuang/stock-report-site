@@ -6,10 +6,11 @@ import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { TwStockDashboard } from "@/components/TwStockDashboard";
 import { TwPortfolioDashboard } from "@/components/TwPortfolioDashboard";
 import { TwMarketWeeklyDashboard } from "@/components/TwMarketWeeklyDashboard";
+import { TwMarketDailyDashboard } from "@/components/TwMarketDailyDashboard";
 import { UsStockDashboard } from "@/components/UsStockDashboard";
 
 type MarketTab = "tw" | "us";
-type TwView = "chip" | "portfolio" | "weekly";
+type TwView = "chip" | "portfolio" | "weekly" | "daily";
 
 function tabClass(active: boolean): string {
   return active
@@ -20,6 +21,7 @@ function tabClass(active: boolean): string {
 function parseTwView(raw: string | null): TwView {
   if (raw === "portfolio") return "portfolio";
   if (raw === "weekly") return "weekly";
+  if (raw === "daily") return "daily";
   return "chip";
 }
 
@@ -43,6 +45,10 @@ export function HomeShell() {
       router.replace("/?view=weekly");
       return;
     }
+    if (next === "daily") {
+      router.replace("/?view=daily");
+      return;
+    }
     router.replace("/");
   }
 
@@ -60,7 +66,8 @@ export function HomeShell() {
   }
 
   const wide =
-    market === "tw" && (twView === "portfolio" || twView === "weekly");
+    market === "tw" &&
+    (twView === "portfolio" || twView === "weekly" || twView === "daily");
 
   return (
     <div className="min-h-full bg-zinc-100 dark:bg-zinc-950">
@@ -130,6 +137,13 @@ export function HomeShell() {
               >
                 市場週報
               </button>
+              <button
+                type="button"
+                onClick={() => selectTwView("daily")}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(twView === "daily")}`}
+              >
+                開盤前日報
+              </button>
             </nav>
           ) : null}
         </div>
@@ -144,6 +158,8 @@ export function HomeShell() {
           <TwPortfolioDashboard />
         ) : twView === "weekly" ? (
           <TwMarketWeeklyDashboard />
+        ) : twView === "daily" ? (
+          <TwMarketDailyDashboard />
         ) : (
           <TwStockDashboard />
         )}

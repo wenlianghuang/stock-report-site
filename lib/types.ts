@@ -668,3 +668,157 @@ export function rowToMarketWeekly(row: MarketWeeklyRow): MarketWeeklyRecord {
     updatedAt: row.updated_at,
   };
 }
+
+export type MarketDayFacts = {
+  trade_date: string;
+  for_session: string;
+  prior_trade_date?: string | null;
+  lookback_days?: string[];
+  resolved_as_of?: string;
+  cutover_applied?: boolean;
+  bias_hint?: string;
+  market?: {
+    day_return_pct?: number | null;
+    close?: number | null;
+    prior_close?: number | null;
+    high?: number | null;
+    low?: number | null;
+    close_in_day_range_pct?: number | null;
+  };
+  volume?: {
+    volume?: number | null;
+    avg5?: number | null;
+    avg20?: number | null;
+    vs_avg5_ratio?: number | null;
+    regime?: string;
+  };
+  institutional?: {
+    available?: boolean;
+    foreign_net?: number | null;
+    trust_net?: number | null;
+    dealer_net?: number | null;
+    total_net?: number | null;
+    consensus?: string;
+    consensus_label?: string;
+    unit?: string;
+  };
+  technical?: {
+    ma5?: number | null;
+    ma20?: number | null;
+    vs_ma5?: string;
+    vs_ma20?: string;
+    close_in_day_range_pct?: number | null;
+  };
+  tsmc?: {
+    available?: boolean;
+    stock_id?: string;
+    name?: string;
+    close?: number | null;
+    day_return_pct?: number | null;
+  };
+  us?: {
+    available?: boolean;
+    indices?: {
+      IXIC?: { day_return_pct?: number | null; session_date?: string } | null;
+      SOX?: { day_return_pct?: number | null; session_date?: string } | null;
+    };
+    alignment?: {
+      ixic_vs_taiex?: string;
+      sox_vs_tsmc?: string;
+    };
+    gaps?: {
+      ixic_minus_taiex_pct?: number | null;
+      sox_minus_tsmc_pct?: number | null;
+    };
+    ixic_day_return_pct?: number | null;
+    sox_day_return_pct?: number | null;
+    ixic_vs_taiex?: string;
+    sox_vs_tsmc?: string;
+  };
+  anchors?: string[];
+};
+
+export type MarketDaySummary = {
+  version?: number;
+  kind?: string;
+  trade_date?: string;
+  for_session?: string;
+  bias_hint?: string;
+  market?: {
+    day_return_pct?: number | null;
+    tone?: string;
+    close?: number | null;
+    close_in_day_range_pct?: number | null;
+    headline?: string;
+  };
+  volume?: MarketDayFacts["volume"];
+  institutional?: MarketDayFacts["institutional"];
+  technical?: MarketDayFacts["technical"];
+  tsmc?: MarketDayFacts["tsmc"];
+  us?: MarketDayFacts["us"];
+  bias?: string;
+  dashboard?: string;
+  external?: string;
+  anchors?: string[];
+};
+
+export type MarketDailyJob = {
+  id: string;
+  status: string;
+  trade_date?: string | null;
+  for_session?: string | null;
+  as_of?: string | null;
+  error?: string | null;
+  facts?: MarketDayFacts | null;
+  summary?: MarketDaySummary | null;
+  markdown?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type MarketDailyRecord = {
+  id: string;
+  userId: string;
+  agentJobId: string;
+  status: "queued" | "gating" | "done" | "failed";
+  tradeDate?: string;
+  forSession?: string;
+  error?: string;
+  markdown?: string;
+  factsJson?: MarketDayFacts;
+  summaryJson?: MarketDaySummary;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MarketDailyRow = {
+  id: string;
+  user_id: string;
+  agent_job_id: string;
+  status: MarketDailyRecord["status"];
+  trade_date: string | null;
+  for_session: string | null;
+  error: string | null;
+  markdown: string | null;
+  facts_json: MarketDayFacts | null;
+  summary_json: MarketDaySummary | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export function rowToMarketDaily(row: MarketDailyRow): MarketDailyRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    agentJobId: row.agent_job_id,
+    status: row.status,
+    tradeDate: row.trade_date ?? undefined,
+    forSession: row.for_session ?? undefined,
+    error: row.error ?? undefined,
+    markdown: row.markdown ?? undefined,
+    factsJson: row.facts_json ?? undefined,
+    summaryJson: row.summary_json ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
