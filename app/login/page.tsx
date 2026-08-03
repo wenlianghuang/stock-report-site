@@ -1,8 +1,24 @@
 import { AuthForm } from "@/components/AuthForm";
+import { TaiexChart } from "@/components/TaiexChart";
 import { TxFuturesChart } from "@/components/TxFuturesChart";
+import { getTaiexDailyCached, type TaiexSnapshot } from "@/lib/taiex";
 import { getTxFuturesDailyCached, type TxFuturesSnapshot } from "@/lib/tx-futures";
 
 export const dynamic = "force-dynamic";
+
+async function loadTaiexSnapshot(): Promise<{
+  snapshot: TaiexSnapshot | null;
+  error: string | null;
+}> {
+  try {
+    const snapshot = await getTaiexDailyCached();
+    return { snapshot, error: null };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "無法取得加權指數資料";
+    return { snapshot: null, error: message };
+  }
+}
 
 async function loadTxSnapshot(): Promise<{
   snapshot: TxFuturesSnapshot | null;
@@ -19,7 +35,10 @@ async function loadTxSnapshot(): Promise<{
 }
 
 export default async function LoginPage() {
-  const { snapshot, error } = await loadTxSnapshot();
+  const [taiex, tx] = await Promise.all([
+    loadTaiexSnapshot(),
+    loadTxSnapshot(),
+  ]);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-6 py-8 lg:py-12">
@@ -34,13 +53,16 @@ export default async function LoginPage() {
 
       <div className="grid flex-1 items-start gap-10 md:grid-cols-[minmax(0,1.4fr)_minmax(260px,0.75fr)] md:gap-12">
         <section
-          aria-label="台指期日 K"
+          aria-label="大盤日 K"
           className="min-w-0 border-t border-zinc-200 pt-6 dark:border-zinc-800 md:border-t-0 md:border-r md:pr-10 md:pt-0"
         >
-          <TxFuturesChart snapshot={snapshot} error={error} />
+          <div className="flex flex-col gap-10">
+            <TaiexChart snapshot={taiex.snapshot} error={taiex.error} />
+            <TxFuturesChart snapshot={tx.snapshot} error={tx.error} />
+          </div>
           <p className="mt-4 max-w-prose text-xs leading-relaxed text-zinc-500">
-            日盤近月連續契約；非交易日顯示最近一個有行情的交易日（例如週一早上仍見上週五）。
-            資料來源為期交所公開行情，不消耗 FinMind 額度。
+            加權為現貨加權指數日 K；台指期為日盤近月連續契約。非交易日顯示最近一個有行情的交易日（例如週一早上仍見上週五）。
+            資料來源為 Yahoo / 期交所公開行情，不消耗 FinMind 額度。
           </p>
         </section>
 

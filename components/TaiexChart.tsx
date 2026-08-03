@@ -19,10 +19,10 @@ import {
   formatChartDate,
   type ChartPoint,
 } from "@/lib/chart-utils";
-import type { TxFuturesSnapshot } from "@/lib/tx-futures";
+import type { TaiexSnapshot } from "@/lib/taiex";
 
-type TxFuturesChartProps = {
-  snapshot: TxFuturesSnapshot | null;
+type TaiexChartProps = {
+  snapshot: TaiexSnapshot | null;
   error?: string | null;
 };
 
@@ -30,8 +30,8 @@ function formatIndex(value: number): string {
   return Math.round(value).toLocaleString("zh-TW");
 }
 
-function formatVolumeLots(value: number): string {
-  return `${value.toLocaleString("zh-TW")} 口`;
+function formatVolume(value: number): string {
+  return value.toLocaleString("zh-TW");
 }
 
 function PriceTooltip({
@@ -56,16 +56,16 @@ function PriceTooltip({
       <p>高：{formatIndex(point.high)}</p>
       <p>低：{formatIndex(point.low)}</p>
       <p>收：{formatIndex(point.close)}</p>
-      {point.volume != null ? <p>量：{formatVolumeLots(point.volume)}</p> : null}
+      {point.volume != null ? <p>量：{formatVolume(point.volume)}</p> : null}
     </div>
   );
 }
 
-export function TxFuturesChart({ snapshot, error }: TxFuturesChartProps) {
+export function TaiexChart({ snapshot, error }: TaiexChartProps) {
   if (error) {
     return (
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        台指期資料暫時無法取得：{error}
+        加權指數資料暫時無法取得：{error}
       </p>
     );
   }
@@ -73,7 +73,7 @@ export function TxFuturesChart({ snapshot, error }: TxFuturesChartProps) {
   if (!snapshot || snapshot.bars.length === 0) {
     return (
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        尚無台指期日 K 資料。
+        尚無加權指數日 K 資料。
       </p>
     );
   }
@@ -84,7 +84,7 @@ export function TxFuturesChart({ snapshot, error }: TxFuturesChartProps) {
     high: bar.high,
     low: bar.low,
     close: bar.close,
-    volume: bar.volume,
+    volume: bar.volume ?? undefined,
     change_pct: bar.changePct ?? undefined,
   }));
   const data = buildChartPoints(history);
@@ -92,13 +92,14 @@ export function TxFuturesChart({ snapshot, error }: TxFuturesChartProps) {
   const changePct = snapshot.changePct;
   const up = changePct == null ? last.close >= last.open : changePct >= 0;
   const changeColor = up ? "text-red-600" : "text-emerald-600";
+  const hasVolume = data.some((point) => point.volume != null && point.volume > 0);
 
   return (
     <div className="flex w-full flex-col gap-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <p className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
-            台指期 · 日盤近月
+            台股加權指數 · 日 K
           </p>
           <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
@@ -113,8 +114,7 @@ export function TxFuturesChart({ snapshot, error }: TxFuturesChartProps) {
           </div>
           <p className="mt-1 text-xs text-zinc-500">
             截至 {snapshot.asOf?.replaceAll("-", "/")}
-            {snapshot.contract ? ` · 契約 ${snapshot.contract}` : null}
-            {" · "}期交所
+            {" · "}Yahoo ^TWII
           </p>
         </div>
       </div>
@@ -128,7 +128,7 @@ export function TxFuturesChart({ snapshot, error }: TxFuturesChartProps) {
         >
           <ComposedChart
             data={data}
-            syncId="tx-futures"
+            syncId="taiex"
             margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
           >
             <CartesianGrid
@@ -151,7 +151,6 @@ export function TxFuturesChart({ snapshot, error }: TxFuturesChartProps) {
             />
             <Tooltip content={<PriceTooltip />} />
             <CandlestickLayer data={data} />
-            {/* Invisible series so Y-axis domain includes high/low */}
             <Line
               yAxisId="price"
               dataKey="high"
@@ -172,32 +171,34 @@ export function TxFuturesChart({ snapshot, error }: TxFuturesChartProps) {
         </ResponsiveContainer>
       </div>
 
-      <div className="w-full">
-        <ResponsiveContainer
-          width="100%"
-          height={72}
-          minWidth={0}
-          initialDimension={{ width: 640, height: 72 }}
-        >
-          <BarChart
-            data={data}
-            syncId="tx-futures"
-            margin={{ top: 0, right: 8, left: 0, bottom: 0 }}
+      {hasVolume ? (
+        <div className="w-full">
+          <ResponsiveContainer
+            width="100%"
+            height={64}
+            minWidth={0}
+            initialDimension={{ width: 640, height: 64 }}
           >
-            <XAxis dataKey="date" hide />
-            <YAxis hide />
-            <Bar dataKey="volume" name="成交量" isAnimationActive={false}>
-              {data.map((point) => (
-                <Cell
-                  key={point.date}
-                  fill={point.isUp ? CHART_COLORS.up : CHART_COLORS.down}
-                  fillOpacity={0.55}
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+            <BarChart
+              data={data}
+              syncId="taiex"
+              margin={{ top: 0, right: 8, left: 0, bottom: 0 }}
+            >
+              <XAxis dataKey="date" hide />
+              <YAxis hide />
+              <Bar dataKey="volume" name="成交量" isAnimationActive={false}>
+                {data.map((point) => (
+                  <Cell
+                    key={point.date}
+                    fill={point.isUp ? CHART_COLORS.up : CHART_COLORS.down}
+                    fillOpacity={0.55}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ) : null}
     </div>
   );
 }
