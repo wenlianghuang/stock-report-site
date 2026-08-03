@@ -718,6 +718,8 @@ export type MarketDayFacts = {
   };
   us?: {
     available?: boolean;
+    as_of?: string | null;
+    cutover_passed?: boolean | null;
     indices?: {
       IXIC?: { day_return_pct?: number | null; session_date?: string } | null;
       SOX?: { day_return_pct?: number | null; session_date?: string } | null;
@@ -732,6 +734,8 @@ export type MarketDayFacts = {
     };
     ixic_day_return_pct?: number | null;
     sox_day_return_pct?: number | null;
+    ixic_session_date?: string | null;
+    sox_session_date?: string | null;
     ixic_vs_taiex?: string;
     sox_vs_tsmc?: string;
   };

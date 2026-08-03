@@ -15,6 +15,8 @@ type ResolveWindow = {
   lookback_days: string[];
   cutover_applied: boolean;
   resolved_as_of: string;
+  us_as_of?: string;
+  us_cutover_passed?: boolean;
 };
 
 function formatPct(value?: number | null) {
@@ -249,6 +251,9 @@ export function TwMarketDailyDashboard() {
                 <span className="text-zinc-500">
                   {" "}
                   → 服務 {windowInfo.for_session} 開盤
+                  {windowInfo.us_as_of
+                    ? ` · 美股 as_of ${windowInfo.us_as_of}`
+                    : ""}
                 </span>
               </p>
             ) : null}
@@ -406,6 +411,21 @@ export function TwMarketDailyDashboard() {
 
               <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
                 <h3 className="text-sm font-semibold">美股對帳</h3>
+                <p className="mt-1 text-xs text-zinc-500">
+                  as_of {us?.as_of ?? "—"}
+                  {us?.cutover_passed === false
+                    ? "（台北 05:30 前，仍用前一日美股）"
+                    : us?.cutover_passed
+                      ? "（台北 05:30 後，已用最新美股）"
+                      : ""}
+                  {us?.ixic_session_date || us?.indices?.IXIC?.session_date
+                    ? ` · session ${
+                        us?.ixic_session_date ??
+                        us?.indices?.IXIC?.session_date ??
+                        ""
+                      }`
+                    : ""}
+                </p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <div className="flex items-center justify-between text-sm">
                     <span>那指 {formatPct(typeof ixicRet === "number" ? ixicRet : null)}</span>

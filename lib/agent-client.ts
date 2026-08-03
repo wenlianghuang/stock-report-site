@@ -513,6 +513,8 @@ export async function resolveMarketDaily(input?: {
   lookback_days: string[];
   cutover_applied: boolean;
   resolved_as_of: string;
+  us_as_of: string;
+  us_cutover_passed: boolean;
 }> {
   const params = new URLSearchParams();
   if (input?.asOf) params.set("as_of", input.asOf);
@@ -534,6 +536,8 @@ export async function resolveMarketDaily(input?: {
       lookback_days: string[];
       cutover_applied: boolean;
       resolved_as_of: string;
+      us_as_of: string;
+      us_cutover_passed: boolean;
     };
   };
   return payload.window;
