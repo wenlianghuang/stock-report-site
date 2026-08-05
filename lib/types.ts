@@ -789,6 +789,8 @@ export type MarketDailyChatResult = {
   reply: string;
   intent: string;
   source: string;
+  sources_used?: string[];
+  factual_slot?: string | null;
   has_holdings: boolean;
   trade_date?: string | null;
   for_session?: string | null;

@@ -9,6 +9,7 @@ type ChatMessage = {
   content: string;
   intent?: string;
   source?: string;
+  sourcesUsed?: string[];
 };
 
 type Props = {
@@ -78,6 +79,7 @@ export function TwMarketDailyChat({ recordId, disabled }: Props) {
           content: chat.reply,
           intent: chat.intent,
           source: chat.source,
+          sourcesUsed: chat.sources_used,
         },
       ]);
     } catch (err) {
@@ -93,7 +95,7 @@ export function TwMarketDailyChat({ recordId, disabled }: Props) {
         <div>
           <h3 className="text-sm font-semibold">針對本份 brief 提問</h3>
           <p className="mt-1 text-xs text-zinc-500">
-            只依當日 facts／summary／markdown 回答；重整頁面後對話會清空。不做外網搜尋。
+            常見事實題走 brief 模板；外訊優先 us-tech RSS，Tavily 有日配額。重整後對話清空。
           </p>
         </div>
       </div>
@@ -135,6 +137,9 @@ export function TwMarketDailyChat({ recordId, disabled }: Props) {
                   <p className="mt-2 text-[10px] uppercase tracking-wide text-zinc-400">
                     {msg.intent}
                     {msg.source ? ` · ${msg.source}` : ""}
+                    {msg.sourcesUsed?.length
+                      ? ` · ${msg.sourcesUsed.join("+")}`
+                      : ""}
                   </p>
                 ) : null}
               </div>

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { chatMarketDaily } from "@/lib/agent-client";
-import { findMarketDailyById, userHasAnyHoldings } from "@/lib/db";
+import {
+  findMarketDailyById,
+  listHoldingsForUser,
+} from "@/lib/db";
 import type { MarketDailyChatHistoryItem } from "@/lib/types";
 
 type RouteContext = {
@@ -71,7 +74,18 @@ export async function POST(request: Request, context: RouteContext) {
       content: item.content.trim().slice(0, 1500),
     }));
 
-  const hasHoldings = await userHasAnyHoldings(user.id);
+  const holdingRecords = await listHoldingsForUser(user.id, { limit: 20 });
+  const hasHoldings = holdingRecords.length > 0;
+  const holdings = holdingRecords.map((item) => ({
+    stock_id: item.stockId,
+    share_count: item.shareCount,
+    avg_cost: item.avgCost,
+    uses_margin: item.usesMargin,
+    cash_share_count: item.cashShareCount ?? null,
+    cash_avg_cost: item.cashAvgCost ?? null,
+    margin_share_count: item.marginShareCount ?? null,
+    margin_avg_cost: item.marginAvgCost ?? null,
+  }));
 
   try {
     const chat = await chatMarketDaily({
@@ -81,6 +95,7 @@ export async function POST(request: Request, context: RouteContext) {
       summary: record.summaryJson as Record<string, unknown> | undefined,
       markdown: record.markdown,
       hasHoldings,
+      holdings,
       history,
     });
     return NextResponse.json({ chat, hasHoldings });

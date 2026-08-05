@@ -238,6 +238,25 @@ export async function userHasAnyHoldings(userId: string): Promise<boolean> {
   return (count ?? 0) > 0;
 }
 
+export async function listHoldingsForUser(
+  userId: string,
+  options?: { limit?: number },
+): Promise<HoldingRecord[]> {
+  const limit = options?.limit ?? 20;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("holdings")
+    .select("*")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false })
+    .limit(limit);
+
+  if (error || !data) {
+    return [];
+  }
+  return (data as HoldingRow[]).map(rowToHolding);
+}
+
 export async function upsertHoldingForUserStock(input: {
   userId: string;
   stockId: string;
