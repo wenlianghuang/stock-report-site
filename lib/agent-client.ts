@@ -2,6 +2,8 @@ import type {
   AgentJob,
   ChipFacts,
   HistoryDay,
+  MarketDailyChatHistoryItem,
+  MarketDailyChatResult,
   MarketDailyJob,
   MarketWeeklyJob,
   PortfolioJob,
@@ -596,4 +598,45 @@ export async function getMarketDailyJob(
   }
   const payload = (await response.json()) as { job: MarketDailyJob };
   return payload.job;
+}
+
+export async function chatMarketDaily(input: {
+  message: string;
+  tradeDate?: string | null;
+  facts?: Record<string, unknown> | null;
+  summary?: Record<string, unknown> | null;
+  markdown?: string | null;
+  hasHoldings?: boolean;
+  history?: MarketDailyChatHistoryItem[];
+  useLlm?: boolean;
+}): Promise<MarketDailyChatResult> {
+  const body: Record<string, unknown> = {
+    message: input.message,
+    has_holdings: Boolean(input.hasHoldings),
+    use_llm: input.useLlm !== false,
+  };
+  if (input.tradeDate) body.trade_date = input.tradeDate;
+  if (input.facts) body.facts = input.facts;
+  if (input.summary) body.summary = input.summary;
+  if (input.markdown) body.markdown = input.markdown;
+  if (input.history?.length) body.history = input.history;
+
+  const response = await fetch(`${baseUrl()}/market-daily/chat`, {
+    method: "POST",
+    headers: agentHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      detail = data.detail ?? "";
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail || `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as { chat: MarketDailyChatResult };
+  return payload.chat;
 }

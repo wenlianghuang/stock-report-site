@@ -780,6 +780,21 @@ export type MarketDailyJob = {
   updated_at?: string;
 };
 
+export type MarketDailyChatHistoryItem = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type MarketDailyChatResult = {
+  reply: string;
+  intent: string;
+  source: string;
+  has_holdings: boolean;
+  trade_date?: string | null;
+  for_session?: string | null;
+  bias_hint?: string | null;
+};
+
 export type MarketDailyRecord = {
   id: string;
   userId: string;

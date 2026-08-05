@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MarkdownReport } from "@/components/MarkdownReport";
+import { TwMarketDailyChat } from "@/components/TwMarketDailyChat";
 import type {
   MarketDailyRecord,
   MarketDayFacts,
@@ -457,6 +458,11 @@ export function TwMarketDailyDashboard() {
                     {dashboardText}
                   </p>
                 </section>
+              ) : null}
+
+              {active.status === "done" &&
+              (active.factsJson || active.summaryJson || active.markdown) ? (
+                <TwMarketDailyChat recordId={active.id} />
               ) : null}
 
               {active.error ? (

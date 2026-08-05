@@ -225,6 +225,19 @@ export async function findHoldingForUserStock(
   return rowToHolding(data as HoldingRow);
 }
 
+export async function userHasAnyHoldings(userId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("holdings")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  if (error) {
+    return false;
+  }
+  return (count ?? 0) > 0;
+}
+
 export async function upsertHoldingForUserStock(input: {
   userId: string;
   stockId: string;
