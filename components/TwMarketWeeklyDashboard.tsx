@@ -572,7 +572,10 @@ export function TwMarketWeeklyDashboard() {
 
   const scenariosText = useMemo(() => {
     const fromSummary = (summary?.scenarios || "").trim();
-    if (fromSummary.length >= 200) return fromSummary;
+    const flattened =
+      !fromSummary.includes("\n") &&
+      /(\*\*|###?\s|\d+\.\s|- \*\*)/.test(fromSummary);
+    if (fromSummary.length >= 200 && !flattened) return fromSummary;
     const fromMd = active?.markdown
       ? extractMarkdownSection(active.markdown, ["下週", "情境"])
       : "";

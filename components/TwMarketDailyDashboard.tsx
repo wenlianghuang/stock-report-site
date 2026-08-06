@@ -84,6 +84,45 @@ function AlignChip({ label }: { label?: string | null }) {
   );
 }
 
+/** Prefer structured Markdown; fall back when older summaries flattened newlines. */
+function looksFlattenedMarkdown(text: string): boolean {
+  if (!text.includes("\n") && /(\*\*|###?\s|\d+\.\s|- \*\*)/.test(text)) {
+    return true;
+  }
+  return false;
+}
+
+function extractMarkdownSection(markdown: string, keywords: string[]): string {
+  const lines = markdown.split(/\r?\n/);
+  let start = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (
+      keywords.some((kw) => line.includes(kw)) &&
+      (/^#{1,3}\s/.test(line) || /[一二三四五]/.test(line.slice(0, 8)))
+    ) {
+      start = i;
+      break;
+    }
+  }
+  if (start < 0) {
+    start = lines.findIndex((line) => keywords.some((kw) => line.includes(kw)));
+  }
+  if (start < 0) return "";
+  const chunks: string[] = [];
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    const isMajor =
+      /^##?\s*[一二三四五]、/.test(line.trim()) ||
+      (/^##\s+/.test(line) &&
+        !line.startsWith("###") &&
+        /(結構|外盤|偏誤|儀表|免責)/.test(line));
+    if (isMajor) break;
+    chunks.push(line);
+  }
+  return chunks.join("\n").trim();
+}
+
 export function TwMarketDailyDashboard() {
   const [windowInfo, setWindowInfo] = useState<ResolveWindow | null>(null);
   const [records, setRecords] = useState<MarketDailyRecord[]>([]);
@@ -232,11 +271,27 @@ export function TwMarketDailyDashboard() {
   const ixicAlign = us?.ixic_vs_taiex ?? us?.alignment?.ixic_vs_taiex ?? null;
   const soxAlign = us?.sox_vs_tsmc ?? us?.alignment?.sox_vs_tsmc ?? null;
 
-  const biasText = useMemo(() => (summary?.bias || "").trim(), [summary?.bias]);
-  const dashboardText = useMemo(
-    () => (summary?.dashboard || "").trim(),
-    [summary?.dashboard],
-  );
+  const biasText = useMemo(() => {
+    const fromSummary = (summary?.bias || "").trim();
+    if (fromSummary && !looksFlattenedMarkdown(fromSummary)) {
+      return fromSummary;
+    }
+    const fromMd = active?.markdown
+      ? extractMarkdownSection(active.markdown, ["偏誤", "開盤"])
+      : "";
+    return (fromMd || fromSummary).trim();
+  }, [summary?.bias, active?.markdown]);
+
+  const dashboardText = useMemo(() => {
+    const fromSummary = (summary?.dashboard || "").trim();
+    if (fromSummary && !looksFlattenedMarkdown(fromSummary)) {
+      return fromSummary;
+    }
+    const fromMd = active?.markdown
+      ? extractMarkdownSection(active.markdown, ["儀表", "觀察"])
+      : "";
+    return (fromMd || fromSummary).trim();
+  }, [summary?.dashboard, active?.markdown]);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
@@ -447,18 +502,18 @@ export function TwMarketDailyDashboard() {
               {biasText ? (
                 <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
                   <h3 className="text-sm font-semibold">明日開盤偏誤</h3>
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-                    {biasText}
-                  </p>
+                  <div className="mt-3 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+                    <MarkdownReport markdown={biasText} />
+                  </div>
                 </section>
               ) : null}
 
               {dashboardText ? (
                 <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
                   <h3 className="text-sm font-semibold">開盤儀表板</h3>
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-                    {dashboardText}
-                  </p>
+                  <div className="mt-3 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+                    <MarkdownReport markdown={dashboardText} />
+                  </div>
                 </section>
               ) : null}
 
