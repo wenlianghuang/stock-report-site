@@ -694,12 +694,14 @@ export type MarketDayFacts = {
   };
   institutional?: {
     available?: boolean;
+    /** Net buy/sell in TWD (元); FinMind total-market series. Display as 億元. */
     foreign_net?: number | null;
     trust_net?: number | null;
     dealer_net?: number | null;
     total_net?: number | null;
     consensus?: string;
     consensus_label?: string;
+    /** Always "twd" for market-wide institutional amounts. */
     unit?: string;
   };
   technical?: {

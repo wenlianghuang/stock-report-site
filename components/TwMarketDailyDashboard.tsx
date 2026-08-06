@@ -33,9 +33,13 @@ function formatClose(value?: number | null) {
 
 function formatNet(value?: number | null) {
   if (value == null || Number.isNaN(value)) return "—";
-  const lots = value / 1000;
-  const prefix = lots > 0 ? "+" : "";
-  return `${prefix}${lots.toLocaleString("zh-TW", { maximumFractionDigits: 0 })} 張`;
+  // FinMind TaiwanStockTotalInstitutionalInvestors is TWD (元); display as 億元.
+  const yi = value / 1e8;
+  const prefix = yi > 0 ? "+" : "-";
+  return `${prefix}${yi.toLocaleString("zh-TW", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} 億元`;
 }
 
 function pctClass(value?: number | null) {
@@ -342,11 +346,10 @@ export function TwMarketDailyDashboard() {
                     {records.map((item) => (
                       <li
                         key={item.id}
-                        className={`flex items-center gap-2 rounded-md px-2 py-1.5 ${
-                          active.id === item.id
+                        className={`flex items-center gap-2 rounded-md px-2 py-1.5 ${active.id === item.id
                             ? "bg-zinc-100 dark:bg-zinc-800"
                             : "hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
-                        }`}
+                          }`}
                       >
                         <button
                           type="button"
@@ -420,11 +423,10 @@ export function TwMarketDailyDashboard() {
                       ? "（台北 05:30 後，已用最新美股）"
                       : ""}
                   {us?.ixic_session_date || us?.indices?.IXIC?.session_date
-                    ? ` · session ${
-                        us?.ixic_session_date ??
-                        us?.indices?.IXIC?.session_date ??
-                        ""
-                      }`
+                    ? ` · session ${us?.ixic_session_date ??
+                    us?.indices?.IXIC?.session_date ??
+                    ""
+                    }`
                     : ""}
                 </p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -461,7 +463,7 @@ export function TwMarketDailyDashboard() {
               ) : null}
 
               {active.status === "done" &&
-              (active.factsJson || active.summaryJson || active.markdown) ? (
+                (active.factsJson || active.summaryJson || active.markdown) ? (
                 <TwMarketDailyChat recordId={active.id} />
               ) : null}
 
