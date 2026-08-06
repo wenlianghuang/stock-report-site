@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { MarketDailyChatResult } from "@/lib/types";
 
 type ChatMessage = {
   id: string;
@@ -10,6 +9,7 @@ type ChatMessage = {
   intent?: string;
   source?: string;
   sourcesUsed?: string[];
+  streaming?: boolean;
 };
 
 type Props = {
@@ -22,6 +22,67 @@ const SUGGESTIONS = [
   "明天開盤偏誤？",
   "明天是否進場？",
 ];
+
+type SseHandlers = {
+  onMeta?: (data: Record<string, unknown>) => void;
+  onToken?: (text: string) => void;
+  onDone?: (data: Record<string, unknown>) => void;
+  onError?: (message: string) => void;
+};
+
+async function consumeSse(
+  response: Response,
+  handlers: SseHandlers,
+): Promise<void> {
+  if (!response.body) {
+    throw new Error("串流回應沒有 body");
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let eventName = "message";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n");
+    buffer = parts.pop() ?? "";
+
+    for (const rawLine of parts) {
+      const line = rawLine.replace(/\r$/, "");
+      if (!line) {
+        eventName = "message";
+        continue;
+      }
+      if (line.startsWith("event:")) {
+        eventName = line.slice(6).trim();
+        continue;
+      }
+      if (!line.startsWith("data:")) continue;
+      const payloadText = line.slice(5).trim();
+      if (!payloadText) continue;
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(payloadText) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      if (eventName === "meta") {
+        handlers.onMeta?.(data);
+      } else if (eventName === "token") {
+        const text = typeof data.text === "string" ? data.text : "";
+        if (text) handlers.onToken?.(text);
+      } else if (eventName === "done") {
+        handlers.onDone?.(data);
+      } else if (eventName === "error") {
+        const err =
+          typeof data.error === "string" ? data.error : "串流對話失敗";
+        handlers.onError?.(err);
+      }
+    }
+  }
+}
 
 export function TwMarketDailyChat({ recordId, disabled }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -51,39 +112,135 @@ export function TwMarketDailyChat({ recordId, disabled }: Props) {
       role: "user",
       content: text,
     };
-    setMessages((prev) => [...prev, userMsg]);
+    const assistantId = `a-${Date.now()}`;
+    setMessages((prev) => [
+      ...prev,
+      userMsg,
+      {
+        id: assistantId,
+        role: "assistant",
+        content: "",
+        streaming: true,
+      },
+    ]);
     setInput("");
 
     try {
       const history = [...messages, userMsg]
         .slice(-6)
         .map((item) => ({ role: item.role, content: item.content }));
-      const response = await fetch(`/api/market-daily/${recordId}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, history }),
-      });
-      const payload = (await response.json()) as {
-        chat?: MarketDailyChatResult;
-        error?: string;
-      };
-      if (!response.ok || !payload.chat) {
-        throw new Error(payload.error || "對話失敗");
-      }
-      const chat = payload.chat;
-      setMessages((prev) => [
-        ...prev,
+      const response = await fetch(
+        `/api/market-daily/${recordId}/chat/stream`,
         {
-          id: `a-${Date.now()}`,
-          role: "assistant",
-          content: chat.reply,
-          intent: chat.intent,
-          source: chat.source,
-          sourcesUsed: chat.sources_used,
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
+          },
+          body: JSON.stringify({ message: text, history }),
         },
-      ]);
+      );
+
+      if (!response.ok) {
+        let detail = "";
+        try {
+          const payload = (await response.json()) as { error?: string };
+          detail = payload.error || "";
+        } catch {
+          detail = await response.text();
+        }
+        throw new Error(detail || "對話失敗");
+      }
+
+      let sawError: string | null = null;
+      await consumeSse(response, {
+        onMeta: (data) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantId
+                ? {
+                    ...msg,
+                    intent:
+                      typeof data.intent === "string" ? data.intent : msg.intent,
+                    source:
+                      typeof data.source === "string" ? data.source : msg.source,
+                    sourcesUsed: Array.isArray(data.sources_used)
+                      ? (data.sources_used as string[])
+                      : msg.sourcesUsed,
+                  }
+                : msg,
+            ),
+          );
+        },
+        onToken: (piece) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantId
+                ? { ...msg, content: `${msg.content}${piece}`, streaming: true }
+                : msg,
+            ),
+          );
+        },
+        onDone: (data) => {
+          const reply =
+            typeof data.reply === "string" ? data.reply : undefined;
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantId
+                ? {
+                    ...msg,
+                    content: reply ?? msg.content,
+                    intent:
+                      typeof data.intent === "string" ? data.intent : msg.intent,
+                    source:
+                      typeof data.source === "string" ? data.source : msg.source,
+                    sourcesUsed: Array.isArray(data.sources_used)
+                      ? (data.sources_used as string[])
+                      : msg.sourcesUsed,
+                    streaming: false,
+                  }
+                : msg,
+            ),
+          );
+        },
+        onError: (messageText) => {
+          sawError = messageText;
+        },
+      });
+
+      if (sawError) {
+        setMessages((prev) => {
+          const current = prev.find((msg) => msg.id === assistantId);
+          if (current?.content) {
+            return prev.map((msg) =>
+              msg.id === assistantId ? { ...msg, streaming: false } : msg,
+            );
+          }
+          return prev.filter((msg) => msg.id !== assistantId);
+        });
+        throw new Error(sawError);
+      }
+
+      setMessages((prev) => {
+        const current = prev.find((msg) => msg.id === assistantId);
+        if (current && !current.content.trim()) {
+          return prev.filter((msg) => msg.id !== assistantId);
+        }
+        return prev.map((msg) =>
+          msg.id === assistantId ? { ...msg, streaming: false } : msg,
+        );
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "對話失敗");
+      setMessages((prev) => {
+        const current = prev.find((msg) => msg.id === assistantId);
+        if (current && !current.content.trim()) {
+          return prev.filter((msg) => msg.id !== assistantId);
+        }
+        return prev.map((msg) =>
+          msg.id === assistantId ? { ...msg, streaming: false } : msg,
+        );
+      });
     } finally {
       setSending(false);
     }
@@ -95,7 +252,7 @@ export function TwMarketDailyChat({ recordId, disabled }: Props) {
         <div>
           <h3 className="text-sm font-semibold">針對本份 brief 提問</h3>
           <p className="mt-1 text-xs text-zinc-500">
-            常見事實題走 brief 模板；外訊優先 us-tech RSS，Tavily 有日配額。重整後對話清空。
+            常見事實題走 brief 模板；長尾 LLM 回覆會串流顯示。重整後對話清空。
           </p>
         </div>
       </div>
@@ -132,8 +289,11 @@ export function TwMarketDailyChat({ recordId, disabled }: Props) {
                     : "bg-white text-zinc-800 ring-1 ring-zinc-200 dark:bg-zinc-900 dark:text-zinc-200 dark:ring-zinc-700"
                 }`}
               >
-                {msg.content}
-                {msg.role === "assistant" && msg.intent ? (
+                {msg.content || (msg.streaming ? "…" : "")}
+                {msg.streaming ? (
+                  <span className="ml-0.5 inline-block animate-pulse">▍</span>
+                ) : null}
+                {msg.role === "assistant" && msg.intent && !msg.streaming ? (
                   <p className="mt-2 text-[10px] uppercase tracking-wide text-zinc-400">
                     {msg.intent}
                     {msg.source ? ` · ${msg.source}` : ""}
@@ -146,9 +306,6 @@ export function TwMarketDailyChat({ recordId, disabled }: Props) {
             </div>
           ))
         )}
-        {sending ? (
-          <p className="text-xs text-zinc-500">回覆中…</p>
-        ) : null}
         <div ref={bottomRef} />
       </div>
 
@@ -176,7 +333,7 @@ export function TwMarketDailyChat({ recordId, disabled }: Props) {
           disabled={sending || disabled || !input.trim()}
           className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
         >
-          送出
+          {sending ? "回覆中…" : "送出"}
         </button>
       </form>
     </section>

@@ -653,3 +653,53 @@ export async function chatMarketDaily(input: {
   const payload = (await response.json()) as { chat: MarketDailyChatResult };
   return payload.chat;
 }
+
+export type MarketDailyChatStreamInput = {
+  message: string;
+  tradeDate?: string | null;
+  facts?: Record<string, unknown> | null;
+  summary?: Record<string, unknown> | null;
+  markdown?: string | null;
+  hasHoldings?: boolean;
+  holdings?: Array<{
+    stock_id: string;
+    share_count: number;
+    avg_cost: number;
+    uses_margin?: boolean;
+    cash_share_count?: number | null;
+    cash_avg_cost?: number | null;
+    margin_share_count?: number | null;
+    margin_avg_cost?: number | null;
+  }>;
+  history?: MarketDailyChatHistoryItem[];
+  useLlm?: boolean;
+  skipTavily?: boolean;
+};
+
+export async function chatMarketDailyStream(
+  input: MarketDailyChatStreamInput,
+): Promise<Response> {
+  const body: Record<string, unknown> = {
+    message: input.message,
+    has_holdings: Boolean(input.hasHoldings),
+    use_llm: input.useLlm !== false,
+    skip_tavily: Boolean(input.skipTavily),
+  };
+  if (input.tradeDate) body.trade_date = input.tradeDate;
+  if (input.facts) body.facts = input.facts;
+  if (input.summary) body.summary = input.summary;
+  if (input.markdown) body.markdown = input.markdown;
+  if (input.holdings?.length) body.holdings = input.holdings;
+  if (input.history?.length) body.history = input.history;
+
+  const response = await fetch(`${baseUrl()}/market-daily/chat/stream`, {
+    method: "POST",
+    headers: agentHeaders({
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    }),
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  return response;
+}
