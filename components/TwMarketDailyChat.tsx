@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 type ChatMessage = {
   id: string;
@@ -40,31 +41,47 @@ async function consumeSse(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let eventName = "message";
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split("\n");
-    buffer = parts.pop() ?? "";
 
-    for (const rawLine of parts) {
-      const line = rawLine.replace(/\r$/, "");
-      if (!line) {
-        eventName = "message";
-        continue;
+    // Process complete SSE frames as soon as each blank line arrives.
+    while (true) {
+      const sep = buffer.indexOf("\n\n");
+      const sepCr = buffer.indexOf("\r\n\r\n");
+      let idx = -1;
+      let sepLen = 2;
+      if (sepCr !== -1 && (sep === -1 || sepCr < sep)) {
+        idx = sepCr;
+        sepLen = 4;
+      } else if (sep !== -1) {
+        idx = sep;
+        sepLen = 2;
       }
-      if (line.startsWith("event:")) {
-        eventName = line.slice(6).trim();
-        continue;
+      if (idx === -1) break;
+
+      const frame = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + sepLen);
+      let eventName = "message";
+      let dataLine = "";
+
+      for (const rawLine of frame.split(/\r?\n/)) {
+        if (!rawLine) continue;
+        if (rawLine.startsWith("event:")) {
+          eventName = rawLine.slice(6).trim();
+          continue;
+        }
+        if (rawLine.startsWith("data:")) {
+          dataLine = rawLine.slice(5).trim();
+        }
       }
-      if (!line.startsWith("data:")) continue;
-      const payloadText = line.slice(5).trim();
-      if (!payloadText) continue;
+      if (!dataLine) continue;
+
       let data: Record<string, unknown>;
       try {
-        data = JSON.parse(payloadText) as Record<string, unknown>;
+        data = JSON.parse(dataLine) as Record<string, unknown>;
       } catch {
         continue;
       }
@@ -129,17 +146,15 @@ export function TwMarketDailyChat({ recordId, disabled }: Props) {
       const history = [...messages, userMsg]
         .slice(-6)
         .map((item) => ({ role: item.role, content: item.content }));
-      const response = await fetch(
-        `/api/market-daily/${recordId}/chat/stream`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "text/event-stream",
-          },
-          body: JSON.stringify({ message: text, history }),
+      // Primary path is SSE on /chat (also aliased at /chat/stream).
+      const response = await fetch(`/api/market-daily/${recordId}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
         },
-      );
+        body: JSON.stringify({ message: text, history }),
+      });
 
       if (!response.ok) {
         let detail = "";
@@ -152,56 +167,81 @@ export function TwMarketDailyChat({ recordId, disabled }: Props) {
         throw new Error(detail || "對話失敗");
       }
 
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("text/event-stream")) {
+        throw new Error(
+          "伺服器未回傳串流（text/event-stream）。請確認 Next 與 Agent 已重啟到最新版。",
+        );
+      }
+
       let sawError: string | null = null;
       await consumeSse(response, {
         onMeta: (data) => {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantId
-                ? {
-                    ...msg,
-                    intent:
-                      typeof data.intent === "string" ? data.intent : msg.intent,
-                    source:
-                      typeof data.source === "string" ? data.source : msg.source,
-                    sourcesUsed: Array.isArray(data.sources_used)
-                      ? (data.sources_used as string[])
-                      : msg.sourcesUsed,
-                  }
-                : msg,
-            ),
-          );
+          flushSync(() => {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantId
+                  ? {
+                      ...msg,
+                      intent:
+                        typeof data.intent === "string"
+                          ? data.intent
+                          : msg.intent,
+                      source:
+                        typeof data.source === "string"
+                          ? data.source
+                          : msg.source,
+                      sourcesUsed: Array.isArray(data.sources_used)
+                        ? (data.sources_used as string[])
+                        : msg.sourcesUsed,
+                    }
+                  : msg,
+              ),
+            );
+          });
         },
         onToken: (piece) => {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantId
-                ? { ...msg, content: `${msg.content}${piece}`, streaming: true }
-                : msg,
-            ),
-          );
+          flushSync(() => {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantId
+                  ? {
+                      ...msg,
+                      content: `${msg.content}${piece}`,
+                      streaming: true,
+                    }
+                  : msg,
+              ),
+            );
+          });
         },
         onDone: (data) => {
           const reply =
             typeof data.reply === "string" ? data.reply : undefined;
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantId
-                ? {
-                    ...msg,
-                    content: reply ?? msg.content,
-                    intent:
-                      typeof data.intent === "string" ? data.intent : msg.intent,
-                    source:
-                      typeof data.source === "string" ? data.source : msg.source,
-                    sourcesUsed: Array.isArray(data.sources_used)
-                      ? (data.sources_used as string[])
-                      : msg.sourcesUsed,
-                    streaming: false,
-                  }
-                : msg,
-            ),
-          );
+          flushSync(() => {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantId
+                  ? {
+                      ...msg,
+                      content: reply ?? msg.content,
+                      intent:
+                        typeof data.intent === "string"
+                          ? data.intent
+                          : msg.intent,
+                      source:
+                        typeof data.source === "string"
+                          ? data.source
+                          : msg.source,
+                      sourcesUsed: Array.isArray(data.sources_used)
+                        ? (data.sources_used as string[])
+                        : msg.sourcesUsed,
+                      streaming: false,
+                    }
+                  : msg,
+              ),
+            );
+          });
         },
         onError: (messageText) => {
           sawError = messageText;
