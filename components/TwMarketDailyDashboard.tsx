@@ -129,9 +129,9 @@ export function TwMarketDailyDashboard() {
   const [active, setActive] = useState<MarketDailyRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showMarkdown, setShowMarkdown] = useState(false);
+  const [currentReady, setCurrentReady] = useState(false);
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -142,11 +142,13 @@ export function TwMarketDailyDashboard() {
         window?: ResolveWindow | null;
         records?: MarketDailyRecord[];
         error?: string;
+        currentReady?: boolean;
       };
       if (!response.ok) {
         throw new Error(payload.error || "無法載入市場日報");
       }
       setWindowInfo(payload.window ?? null);
+      setCurrentReady(Boolean(payload.currentReady));
       const list = payload.records ?? [];
       setRecords(list);
       setActive((prev) => {
@@ -215,41 +217,13 @@ export function TwMarketDailyDashboard() {
       setRecords((prev) => [record, ...prev.filter((item) => item.id !== record.id)]);
       setActive(record);
       if (record.status !== "done" && record.status !== "failed") {
-        await pollRecord(record.id);
+        await pollRecord(record.agentJobId || record.id);
       }
+      await loadList();
     } catch (err) {
       setError(err instanceof Error ? err.message : "產生失敗");
     } finally {
       setGenerating(false);
-    }
-  }
-
-  async function onDelete(record: MarketDailyRecord) {
-    const label = record.tradeDate || "此筆";
-    if (!window.confirm(`確定要刪除 ${label} 的開盤前 brief 嗎？`)) {
-      return;
-    }
-
-    setError(null);
-    setDeletingId(record.id);
-    try {
-      const response = await fetch(`/api/market-daily/${record.id}`, {
-        method: "DELETE",
-      });
-      const payload = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        throw new Error(payload.error || "刪除失敗");
-      }
-      setRecords((prev) => prev.filter((item) => item.id !== record.id));
-      setActive((current) => {
-        if (current?.id !== record.id) return current;
-        const remaining = records.filter((item) => item.id !== record.id);
-        return remaining[0] ?? null;
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "刪除失敗");
-    } finally {
-      setDeletingId(null);
     }
   }
 
@@ -302,17 +276,20 @@ export function TwMarketDailyDashboard() {
               開盤前戰術 brief
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
-              以當日量價、三大法人、技術錨點與那指／費半對帳，整理下一交易日開盤偏誤（Phase 1，無夜盤）。
+              全站共用一份開盤前 brief。台北 05:30 美股 settle 後由排程產出；每位使用者看到同一份那指／費半對帳與開盤偏誤。持股仍由你自己觸發。
             </p>
             {windowInfo ? (
               <p className="mt-3 text-sm text-zinc-700 dark:text-zinc-300">
-                目前將產生：
+                {currentReady ? "今日共用 brief 已就緒：" : "目前日窗："}
                 <span className="font-medium"> {windowInfo.trade_date}</span>
                 <span className="text-zinc-500">
                   {" "}
                   → 服務 {windowInfo.for_session} 開盤
                   {windowInfo.us_as_of
                     ? ` · 美股 as_of ${windowInfo.us_as_of}`
+                    : ""}
+                  {windowInfo.us_cutover_passed === false
+                    ? " · 尚未過 05:30"
                     : ""}
                 </span>
               </p>
@@ -325,7 +302,11 @@ export function TwMarketDailyDashboard() {
               disabled={generating}
               className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
             >
-              {generating ? "產生中…" : "產生日報"}
+              {generating
+                ? "產生中…"
+                : currentReady
+                  ? "讀取既有 brief"
+                  : "手動產一次（後備）"}
             </button>
             <button
               type="button"
@@ -396,7 +377,7 @@ export function TwMarketDailyDashboard() {
                 </div>
 
                 <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-                  <h3 className="text-sm font-semibold">歷史日報</h3>
+                  <h3 className="text-sm font-semibold">共用歷史</h3>
                   <ul className="mt-3 max-h-40 space-y-1 overflow-y-auto text-sm">
                     {records.map((item) => (
                       <li
@@ -417,14 +398,6 @@ export function TwMarketDailyDashboard() {
                           <span className="block text-xs text-zinc-500">
                             → {item.forSession ?? "—"} · {item.status}
                           </span>
-                        </button>
-                        <button
-                          type="button"
-                          className="shrink-0 text-xs text-zinc-400 hover:text-rose-600"
-                          disabled={deletingId === item.id}
-                          onClick={() => void onDelete(item)}
-                        >
-                          {deletingId === item.id ? "…" : "刪"}
                         </button>
                       </li>
                     ))}
@@ -550,7 +523,7 @@ export function TwMarketDailyDashboard() {
             </>
           ) : (
             <p className="text-sm text-zinc-500">
-              尚無日報。請先確認 Stock API 已啟動，再點「產生日報」。
+              尚無共用 brief。確認 Stock API 已啟動後，等到台北 05:30 排程，或按「手動產一次（後備）」。美股抓失敗會重試，不會默默略過。
             </p>
           )}
         </>

@@ -1,10 +1,16 @@
 import { requireUser } from "@/lib/auth";
-import { chatMarketDailyStream } from "@/lib/agent-client";
 import {
-  findMarketDailyById,
-  listHoldingsForUser,
-} from "@/lib/db";
-import type { MarketDailyChatHistoryItem } from "@/lib/types";
+  chatMarketDailyStream,
+  getMarketDailyJob,
+  listMarketDailyBriefs,
+} from "@/lib/agent-client";
+import { listHoldingsForUser } from "@/lib/db";
+import {
+  briefItemToRecord,
+  isTradeDateId,
+  jobToRecord,
+} from "@/lib/market-daily-shared";
+import type { MarketDailyChatHistoryItem, MarketDailyRecord } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,15 +19,33 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
+async function loadSharedRecord(id: string): Promise<MarketDailyRecord | null> {
+  if (isTradeDateId(id)) {
+    const { items } = await listMarketDailyBriefs();
+    const item = items.find((row) => row.trade_date === id);
+    if (!item || !(item.has_report || item.markdown)) {
+      return null;
+    }
+    return briefItemToRecord(item);
+  }
+  const job = await getMarketDailyJob(id);
+  return jobToRecord(job);
+}
+
 async function buildStreamResponse(request: Request, id: string) {
   const user = await requireUser();
   if (!user) {
     return Response.json({ error: "未登入" }, { status: 401 });
   }
 
-  const record = await findMarketDailyById(id);
-  if (!record || record.userId !== user.id) {
-    return Response.json({ error: "找不到市場日報紀錄" }, { status: 404 });
+  let record: MarketDailyRecord | null;
+  try {
+    record = await loadSharedRecord(id);
+  } catch {
+    return Response.json({ error: "找不到共用市場日報" }, { status: 404 });
+  }
+  if (!record) {
+    return Response.json({ error: "找不到共用市場日報" }, { status: 404 });
   }
 
   if (record.status !== "done") {
@@ -113,7 +137,6 @@ async function buildStreamResponse(request: Request, id: string) {
     );
   }
 
-  // Explicitly pump chunks so Next/proxy does not buffer the full SSE body.
   const reader = upstream.body.getReader();
   const stream = new ReadableStream<Uint8Array>({
     async pull(controller) {

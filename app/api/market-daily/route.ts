@@ -3,9 +3,11 @@ import { requireUser } from "@/lib/auth";
 import {
   checkAgentHealth,
   createMarketDailyJob,
+  getMarketDailyCurrent,
+  listMarketDailyBriefs,
   resolveMarketDaily,
 } from "@/lib/agent-client";
-import { createMarketDaily, listMarketDailiesForUser } from "@/lib/db";
+import { briefItemToRecord, jobToRecord } from "@/lib/market-daily-shared";
 
 export async function GET() {
   const user = await requireUser();
@@ -20,8 +22,30 @@ export async function GET() {
     window = null;
   }
 
-  const records = await listMarketDailiesForUser(user.id);
-  return NextResponse.json({ window, records });
+  try {
+    const { items } = await listMarketDailyBriefs();
+    const records = items
+      .filter((item) => item.has_report || item.markdown)
+      .map(briefItemToRecord);
+    let currentReady = false;
+    try {
+      const current = await getMarketDailyCurrent();
+      currentReady = current.ready;
+      window = current.window ?? window;
+    } catch {
+      currentReady = false;
+    }
+    return NextResponse.json({
+      window,
+      records,
+      shared: true,
+      currentReady,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "無法載入共用市場日報";
+    return NextResponse.json({ error: message, window, records: [] }, { status: 502 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -54,24 +78,11 @@ export async function POST(request: Request) {
       tradeDate: body.tradeDate?.trim() || undefined,
       asOf: body.asOf?.trim() || undefined,
     });
-
-    const record = await createMarketDaily({
-      userId: user.id,
-      agentJobId: agentJob.id,
-      tradeDate: agentJob.trade_date ?? undefined,
-      forSession: agentJob.for_session ?? undefined,
-      status:
-        agentJob.status === "done"
-          ? "done"
-          : agentJob.status === "failed"
-            ? "failed"
-            : "gating",
-      markdown: agentJob.markdown ?? null,
-      factsJson: agentJob.facts ?? null,
-      summaryJson: agentJob.summary ?? null,
+    return NextResponse.json({
+      record: jobToRecord(agentJob),
+      agentJob,
+      shared: true,
     });
-
-    return NextResponse.json({ record, agentJob });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "無法建立市場日報任務";

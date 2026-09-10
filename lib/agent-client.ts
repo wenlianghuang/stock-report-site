@@ -504,6 +504,66 @@ export async function getMarketWeeklyJob(
   return payload.job;
 }
 
+export type SharedMarketDailyItem = {
+  trade_date: string;
+  for_session?: string | null;
+  summary?: MarketDailyJob["summary"];
+  facts?: MarketDailyJob["facts"];
+  markdown?: string | null;
+  has_report?: boolean;
+  ready?: boolean;
+  us_available?: boolean;
+  shared?: boolean;
+};
+
+export async function listMarketDailyBriefs(): Promise<{
+  items: SharedMarketDailyItem[];
+  shared: boolean;
+}> {
+  const response = await fetch(`${baseUrl()}/market-daily`, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as {
+    items?: SharedMarketDailyItem[];
+    shared?: boolean;
+  };
+  return { items: payload.items ?? [], shared: payload.shared !== false };
+}
+
+export async function getMarketDailyCurrent(input?: {
+  asOf?: string;
+  tradeDate?: string;
+}): Promise<{
+  window: Awaited<ReturnType<typeof resolveMarketDaily>>;
+  ready: boolean;
+  shared: boolean;
+  brief: SharedMarketDailyItem;
+}> {
+  const params = new URLSearchParams();
+  if (input?.asOf) params.set("as_of", input.asOf);
+  if (input?.tradeDate) params.set("trade_date", input.tradeDate);
+  const qs = params.toString();
+  const response = await fetch(
+    `${baseUrl()}/market-daily/current${qs ? `?${qs}` : ""}`,
+    { headers: agentHeaders(), cache: "no-store" },
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Agent API error ${response.status}`);
+  }
+  return (await response.json()) as {
+    window: Awaited<ReturnType<typeof resolveMarketDaily>>;
+    ready: boolean;
+    shared: boolean;
+    brief: SharedMarketDailyItem;
+  };
+}
+
 export async function resolveMarketDaily(input?: {
   asOf?: string;
   tradeDate?: string;
