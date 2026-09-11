@@ -504,6 +504,35 @@ export async function getMarketWeeklyJob(
   return payload.job;
 }
 
+export type SharedMarketWeeklyItem = {
+  week_end: string;
+  week_start?: string | null;
+  summary?: MarketWeeklyJob["summary"];
+  facts?: MarketWeeklyJob["facts"];
+  markdown?: string | null;
+  has_report?: boolean;
+  shared?: boolean;
+};
+
+export async function listMarketWeeklyBriefs(): Promise<{
+  items: SharedMarketWeeklyItem[];
+  shared: boolean;
+}> {
+  const response = await fetch(`${baseUrl()}/market-weekly`, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as {
+    items?: SharedMarketWeeklyItem[];
+    shared?: boolean;
+  };
+  return { items: payload.items ?? [], shared: payload.shared !== false };
+}
+
 export type SharedMarketDailyItem = {
   trade_date: string;
   for_session?: string | null;

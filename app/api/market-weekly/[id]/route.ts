@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getMarketWeeklyJob } from "@/lib/agent-client";
 import {
-  deleteMarketWeekly,
-  findMarketWeeklyById,
-  isValidMarketWeeklyStatus,
-  updateMarketWeekly,
-} from "@/lib/db";
+  getMarketWeeklyJob,
+  listMarketWeeklyBriefs,
+} from "@/lib/agent-client";
+import {
+  briefItemToRecord,
+  isWeekEndId,
+  jobToRecord,
+} from "@/lib/market-weekly-shared";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -19,60 +21,43 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   const { id } = await context.params;
-  const record = await findMarketWeeklyById(id);
-  if (!record || record.userId !== user.id) {
-    return NextResponse.json({ error: "找不到市場週報紀錄" }, { status: 404 });
-  }
 
-  if (record.status === "done" && record.markdown) {
-    return NextResponse.json({ record, agentJob: null });
+  if (isWeekEndId(id)) {
+    try {
+      const { items } = await listMarketWeeklyBriefs();
+      const item = items.find((row) => row.week_end === id);
+      if (!item || !(item.has_report || item.markdown)) {
+        return NextResponse.json({ error: "找不到共用市場週報" }, { status: 404 });
+      }
+      return NextResponse.json({
+        record: briefItemToRecord(item),
+        agentJob: null,
+        shared: true,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "無法取得共用市場週報";
+      return NextResponse.json({ error: message }, { status: 502 });
+    }
   }
 
   try {
-    const agentJob = await getMarketWeeklyJob(record.agentJobId);
-    const patch: Parameters<typeof updateMarketWeekly>[1] = {};
-
-    if (isValidMarketWeeklyStatus(agentJob.status)) {
-      patch.status = agentJob.status;
-    } else if (
-      agentJob.status === "queued" ||
-      agentJob.status === "fetching"
-    ) {
-      patch.status = "gating";
-    }
-
-    if (agentJob.week_start) patch.weekStart = agentJob.week_start;
-    if (agentJob.week_end) patch.weekEnd = agentJob.week_end;
-    if (agentJob.error) patch.error = agentJob.error;
-    if (agentJob.markdown) patch.markdown = agentJob.markdown;
-    if (agentJob.facts) patch.factsJson = agentJob.facts;
-    if (agentJob.summary) patch.summaryJson = agentJob.summary;
-
-    if (Object.keys(patch).length > 0) {
-      await updateMarketWeekly(record.id, patch);
-    }
-
-    const refreshed = await findMarketWeeklyById(id);
-    return NextResponse.json({ record: refreshed, agentJob });
+    const agentJob = await getMarketWeeklyJob(id);
+    return NextResponse.json({
+      record: jobToRecord(agentJob),
+      agentJob,
+      shared: true,
+    });
   } catch (error) {
-    if (record.markdown) {
-      return NextResponse.json({ record, agentJob: null });
-    }
     const message =
       error instanceof Error ? error.message : "無法取得市場週報任務狀態";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
-  const user = await requireUser();
-  if (!user) {
-    return NextResponse.json({ error: "未登入" }, { status: 401 });
-  }
-  const { id } = await context.params;
-  const ok = await deleteMarketWeekly(id, user.id);
-  if (!ok) {
-    return NextResponse.json({ error: "刪除失敗" }, { status: 500 });
-  }
-  return NextResponse.json({ ok: true });
+export async function DELETE() {
+  return NextResponse.json(
+    { error: "共用週報由排程管理，不可從網站刪除" },
+    { status: 403 },
+  );
 }
