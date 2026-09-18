@@ -165,7 +165,7 @@ export default function ReportPage() {
             {status === "fetching"
               ? "籌碼資料抓取中，圖表將在資料就緒後顯示…"
               : status === "gating" || status === "positioning"
-                ? "報告產生中，圖表資料同步中…"
+                ? "籌碼已就緒，報告產生中；圖表資料同步中…"
                 : "圖表資料尚未就緒。"}
           </p>
         );

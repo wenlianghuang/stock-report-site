@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          "Stock API 未啟動。請先在 stock-winning-rate 執行：uv run --extra server --extra ui --extra stock python main.py api",
+          "Stock API 未啟動。請先在 stock-winning-rate-Go 執行：go run ./cmd/api",
       },
       { status: 503 },
     );

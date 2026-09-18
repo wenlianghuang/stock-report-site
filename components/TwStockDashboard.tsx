@@ -156,6 +156,83 @@ export function TwStockDashboard() {
     });
   }, []);
 
+  // While any report is still running, poll each one so the list updates live
+  // (status / stockName / tradeDate) without leaving the dashboard.
+  const pendingReportIds = reports
+    .filter(
+      (r) =>
+        r.status === "queued" ||
+        r.status === "fetching" ||
+        r.status === "gating" ||
+        r.status === "positioning",
+    )
+    .map((r) => r.id)
+    .sort()
+    .join(",");
+
+  useEffect(() => {
+    if (!pendingReportIds) {
+      return;
+    }
+    const pendingIds = pendingReportIds.split(",");
+    let cancelled = false;
+
+    async function syncPending() {
+      const updates = await Promise.all(
+        pendingIds.map(async (id) => {
+          try {
+            const response = await fetch(`/api/reports/${id}`);
+            if (!response.ok) {
+              return null;
+            }
+            const data = (await response.json()) as { report?: ReportRecord };
+            return data.report ?? null;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      if (cancelled) {
+        return;
+      }
+      setReports((prev) => {
+        const byId = new Map(prev.map((item) => [item.id, item]));
+        let changed = false;
+        for (const updated of updates) {
+          if (!updated) continue;
+          const existing = byId.get(updated.id);
+          if (
+            !existing ||
+            existing.status !== updated.status ||
+            existing.stockName !== updated.stockName ||
+            existing.tradeDate !== updated.tradeDate ||
+            existing.error !== updated.error
+          ) {
+            byId.set(updated.id, updated);
+            changed = true;
+          }
+        }
+        if (!changed) {
+          return prev;
+        }
+        return Array.from(byId.values()).sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+      });
+    }
+
+    const timer = window.setInterval(() => {
+      void syncPending();
+    }, 3000);
+    void syncPending();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [pendingReportIds]);
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -401,42 +478,103 @@ export function TwStockDashboard() {
     setError("");
     setLoading(true);
 
+    const stockIds = fields.stockId
+      .split(/[,，\s]+/)
+      .map((id) => id.trim())
+      .filter((id) => /^\d{4,6}$/.test(id));
+    const uniqueIds = Array.from(new Set(stockIds));
+
+    if (uniqueIds.length === 0) {
+      setError("請輸入 4～6 碼台股代號（可逗號分隔多檔）");
+      setLoading(false);
+      return;
+    }
+
+    if (fields.isHolding && uniqueIds.length > 1) {
+      setError("持股分析一次只能送一檔；多檔請關閉「持股分析」");
+      setLoading(false);
+      return;
+    }
+
     try {
       const cashShares = fields.cashShareCount ? Number(fields.cashShareCount) : 0;
       const cashCost = fields.cashAvgCost ? Number(fields.cashAvgCost) : undefined;
       const marginLots = fields.marginLotCount ? Number(fields.marginLotCount) : 0;
       const mCost = fields.marginAvgCost ? Number(fields.marginAvgCost) : undefined;
 
-      const response = await fetch("/api/reports", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          stockId: fields.stockId.trim(),
-          ...(tradeDate ? { tradeDate } : {}),
-          ...(fields.isHolding
-            ? {
-                isHolding: true,
-                ...(cashShares > 0 && cashCost
-                  ? { cashShareCount: cashShares, cashAvgCost: cashCost }
-                  : {}),
-                ...(marginLots > 0 && mCost
-                  ? { marginLotCount: marginLots, marginAvgCost: mCost }
-                  : {}),
-              }
-            : {}),
-        }),
-      });
-      const payload = (await response.json()) as {
-        error?: string;
-        report?: ReportRecord;
-      };
+      const holdingBody = fields.isHolding
+        ? {
+            isHolding: true as const,
+            ...(cashShares > 0 && cashCost
+              ? { cashShareCount: cashShares, cashAvgCost: cashCost }
+              : {}),
+            ...(marginLots > 0 && mCost
+              ? { marginLotCount: marginLots, marginAvgCost: mCost }
+              : {}),
+          }
+        : {};
 
-      if (!response.ok || !payload.report) {
-        setError(payload.error ?? "無法建立報告");
-        return;
+      const results = await Promise.all(
+        uniqueIds.map(async (id) => {
+          const response = await fetch("/api/reports", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              stockId: id,
+              ...(tradeDate ? { tradeDate } : {}),
+              ...holdingBody,
+            }),
+          });
+          const payload = (await response.json()) as {
+            error?: string;
+            report?: ReportRecord;
+          };
+          return { id, ok: response.ok, payload };
+        }),
+      );
+
+      const created: ReportRecord[] = [];
+      const failures: string[] = [];
+      for (const result of results) {
+        if (result.ok && result.payload.report) {
+          created.push(result.payload.report);
+        } else {
+          failures.push(
+            `${result.id}: ${result.payload.error ?? "無法建立報告"}`,
+          );
+        }
       }
 
-      window.location.href = `/reports/${payload.report.id}`;
+      if (created.length > 0) {
+        setReports((prev) => {
+          const existing = new Set(created.map((r) => r.id));
+          return [
+            ...created,
+            ...prev.filter((r) => !existing.has(r.id)),
+          ];
+        });
+        const dateKey = created[0]?.tradeDate || tradeDate || reportDateKey(created[0]!);
+        const [year, month, day] = dateKey.split("-");
+        if (year && month && day) {
+          setOpenYears((prev) => ({ ...prev, [year]: true }));
+          setOpenMonths((prev) => ({ ...prev, [`${year}-${month}`]: true }));
+          setOpenDays((prev) => ({ ...prev, [dateKey]: true }));
+        }
+        if (uniqueIds.length === 1 && created.length === 1) {
+          setSentNotice(
+            `已開始分析 ${created[0]!.stockId}，可在下方列表查看進度，或開啟報告頁。`,
+          );
+        } else {
+          setSentNotice(
+            `已送出 ${created.length} 檔分析（後端同時最多跑有限並行），可在下方列表同時追蹤進度。`,
+          );
+        }
+        setStockId("");
+      }
+
+      if (failures.length > 0) {
+        setError(failures.join("；"));
+      }
     } catch {
       setError("網路錯誤，請稍後再試");
     } finally {
@@ -561,10 +699,10 @@ export function TwStockDashboard() {
             <input
               value={stockId}
               onChange={(event) => setStockId(event.target.value)}
-              placeholder="例如 2409"
-              pattern="\d{4,6}"
+              placeholder="2330 或 2330,2317,2454"
               required
-              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
+              title="4～6 碼代號；多檔可用逗號或空白分隔"
+              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[16rem] dark:border-zinc-700 dark:bg-black"
             />
             <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
               <input

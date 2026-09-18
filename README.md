@@ -1,6 +1,6 @@
 # stock-report-site
 
-台股籌碼報告網站：使用者註冊／登入後輸入股號，由 [stock-winning-rate](../stock-winning-rate) 執行 `tw-stock-report` → `report-gate`（agy loop engineering），完成後在網頁渲染 Markdown 報告。
+台股籌碼報告網站：使用者註冊／登入後輸入股號，由 [stock-winning-rate-Go](../stock-winning-rate-Go) 執行抓籌碼 → report-gate（agy），完成後在網頁渲染 Markdown 報告。
 
 ## 架構
 
@@ -48,9 +48,9 @@ cp .env.local.example .env.local
 ### 2. Stock API（分析功能需要）
 
 ```bash
-cd ../stock-winning-rate
-uv sync --extra server --extra ui --extra stock
-uv run --extra server --extra ui --extra stock python main.py api
+cd ../stock-winning-rate-Go
+go run ./cmd/api
+# 預設 http://127.0.0.1:8765
 ```
 
 ### 3. STT 語音服務（可選，本機 Whisper 品質較佳）
