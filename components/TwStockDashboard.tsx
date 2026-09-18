@@ -12,6 +12,105 @@ import {
 } from "@/lib/holding-legs";
 
 const CHIP_READY_MINUTES = 21 * 60 + 30;
+const MAX_STOCK_SLOTS = 20;
+
+type SlotHolding = {
+  cashShareCount: string;
+  cashAvgCost: string;
+  marginLotCount: string;
+  marginAvgCost: string;
+};
+
+function emptySlotHolding(): SlotHolding {
+  return {
+    cashShareCount: "",
+    cashAvgCost: "",
+    marginLotCount: "",
+    marginAvgCost: "",
+  };
+}
+
+function padSlots<T>(items: T[], length: number, factory: () => T): T[] {
+  if (items.length >= length) {
+    return items;
+  }
+  const next = [...items];
+  while (next.length < length) {
+    next.push(factory());
+  }
+  return next;
+}
+
+function slotHoldingHasAnyInput(holding: SlotHolding): boolean {
+  return Boolean(
+    holding.cashShareCount ||
+      holding.cashAvgCost ||
+      holding.marginLotCount ||
+      holding.marginAvgCost,
+  );
+}
+
+function holdingRecordToSlot(holding: {
+  shareCount?: number;
+  avgCost?: number;
+  usesMargin?: boolean;
+  cashShareCount?: number;
+  cashAvgCost?: number;
+  marginShareCount?: number;
+  marginAvgCost?: number;
+}): SlotHolding {
+  const slot = emptySlotHolding();
+  if (holding.cashShareCount || holding.marginShareCount) {
+    if (holding.cashShareCount) {
+      slot.cashShareCount = String(holding.cashShareCount);
+      slot.cashAvgCost = String(holding.cashAvgCost ?? "");
+    }
+    if (holding.marginShareCount) {
+      const lots = sharesToLots(holding.marginShareCount);
+      slot.marginLotCount =
+        lots != null
+          ? String(lots)
+          : String(Math.round(holding.marginShareCount / 1000));
+      slot.marginAvgCost = String(holding.marginAvgCost ?? "");
+    }
+    return slot;
+  }
+  if (holding.shareCount && holding.avgCost) {
+    if (holding.usesMargin) {
+      const lots = sharesToLots(holding.shareCount);
+      slot.marginLotCount =
+        lots != null
+          ? String(lots)
+          : String(Math.round(holding.shareCount / 1000));
+      slot.marginAvgCost = String(holding.avgCost);
+    } else {
+      slot.cashShareCount = String(holding.shareCount);
+      slot.cashAvgCost = String(holding.avgCost);
+    }
+  }
+  return slot;
+}
+
+function parseSlotHolding(holding: SlotHolding) {
+  const cashShares = holding.cashShareCount ? Number(holding.cashShareCount) : 0;
+  const cashCost = holding.cashAvgCost ? Number(holding.cashAvgCost) : undefined;
+  const marginLots = holding.marginLotCount ? Number(holding.marginLotCount) : 0;
+  const marginCost = holding.marginAvgCost
+    ? Number(holding.marginAvgCost)
+    : undefined;
+  const cashOk =
+    cashShares > 0 &&
+    cashCost !== undefined &&
+    Number.isFinite(cashCost) &&
+    cashCost > 0;
+  const marginOk =
+    marginLots > 0 &&
+    Number.isInteger(marginLots) &&
+    marginCost !== undefined &&
+    Number.isFinite(marginCost) &&
+    marginCost > 0;
+  return { cashOk, marginOk, cashShares, cashCost, marginLots, marginCost };
+}
 
 type ReportGroup = {
   year: string;
@@ -110,18 +209,17 @@ function groupReportsByDate(reports: ReportRecord[]): ReportGroup[] {
 }
 
 export function TwStockDashboard() {
-  const maxStockSlots = 4;
   const [stockSlotCount, setStockSlotCount] = useState(1);
-  const [stockIds, setStockIds] = useState<string[]>(() =>
-    Array.from({ length: maxStockSlots }, () => ""),
-  );
+  const [slotCountInput, setSlotCountInput] = useState("1");
+  const [stockIds, setStockIds] = useState<string[]>([""]);
   const [tradeDate, setTradeDate] = useState(computeDefaultTradeDate);
   const [isHolding, setIsHolding] = useState(false);
-  const [cashShareCount, setCashShareCount] = useState("");
-  const [cashAvgCost, setCashAvgCost] = useState("");
-  const [marginLotCount, setMarginLotCount] = useState("");
-  const [marginAvgCost, setMarginAvgCost] = useState("");
-  const [holdingLoadedFor, setHoldingLoadedFor] = useState<string | null>(null);
+  const [slotHoldings, setSlotHoldings] = useState<SlotHolding[]>([
+    emptySlotHolding(),
+  ]);
+  const [holdingLoadedFor, setHoldingLoadedFor] = useState<(string | null)[]>([
+    null,
+  ]);
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState("");
@@ -135,37 +233,64 @@ export function TwStockDashboard() {
   const [inputMode, setInputMode] = useState<"text" | "voice">("text");
   const [voiceModalOpen, setVoiceModalOpen] = useState(false);
 
-  const primaryStockId = stockIds[0] ?? "";
-
   function normalizedStockId(value: string) {
     const id = value.trim();
     return /^\d{4,6}$/.test(id) ? id : "";
   }
 
+  function ensureSlotCapacity(count: number) {
+    setStockIds((prev) => padSlots(prev, count, () => ""));
+    setSlotHoldings((prev) => padSlots(prev, count, emptySlotHolding));
+    setHoldingLoadedFor((prev) => padSlots(prev, count, () => null));
+  }
+
   function setStockIdAt(index: number, value: string) {
+    const prevId = normalizedStockId(stockIds[index] ?? "");
+    const nextId = normalizedStockId(value);
     setStockIds((prev) => {
       const next = [...prev];
       next[index] = value;
       return next;
     });
-  }
-
-  function changeStockSlotCount(nextCount: number) {
-    const count = Math.min(maxStockSlots, Math.max(1, nextCount));
-    setStockSlotCount(count);
-    if (count > 1 && isHolding) {
-      setIsHolding(false);
-      setCashShareCount("");
-      setCashAvgCost("");
-      setMarginLotCount("");
-      setMarginAvgCost("");
-      setHoldingLoadedFor(null);
+    if (prevId !== nextId) {
+      setSlotHoldings((prev) => {
+        const next = [...prev];
+        next[index] = emptySlotHolding();
+        return next;
+      });
+      setHoldingLoadedFor((prev) => {
+        const next = [...prev];
+        next[index] = null;
+        return next;
+      });
     }
   }
 
+  function setSlotHoldingAt(index: number, patch: Partial<SlotHolding>) {
+    setSlotHoldings((prev) => {
+      const next = [...prev];
+      next[index] = { ...(next[index] ?? emptySlotHolding()), ...patch };
+      return next;
+    });
+  }
+
+  function changeStockSlotCount(nextCount: number) {
+    if (!Number.isFinite(nextCount)) {
+      setSlotCountInput(String(stockSlotCount));
+      return;
+    }
+    const count = Math.min(MAX_STOCK_SLOTS, Math.max(1, Math.trunc(nextCount)));
+    setStockSlotCount(count);
+    setSlotCountInput(String(count));
+    ensureSlotCapacity(count);
+  }
+
   function resetStockSlots() {
-    setStockIds(Array.from({ length: maxStockSlots }, () => ""));
+    setStockIds([""]);
+    setSlotHoldings([emptySlotHolding()]);
+    setHoldingLoadedFor([null]);
     setStockSlotCount(1);
+    setSlotCountInput("1");
   }
 
   async function loadReports() {
@@ -291,132 +416,99 @@ export function TwStockDashboard() {
 
   useEffect(() => {
     if (!isHolding) return;
-    const id = normalizedStockId(primaryStockId);
-    if (!id) return;
-    if (holdingLoadedFor === id) return;
-
-    const hasAny =
-      Boolean(cashShareCount || cashAvgCost || marginLotCount || marginAvgCost);
-    if (hasAny) {
-      setHoldingLoadedFor(id);
-      return;
-    }
+    const targets = stockIds
+      .slice(0, stockSlotCount)
+      .map((raw, index) => ({ index, id: normalizedStockId(raw) }))
+      .filter(({ index, id }) => Boolean(id) && holdingLoadedFor[index] !== id);
+    if (targets.length === 0) return;
 
     let cancelled = false;
     void (async () => {
-      try {
-        const response = await fetch(`/api/holdings?stockId=${encodeURIComponent(id)}`);
-        const data = (await response.json()) as {
-          holding?: {
-            shareCount?: number;
-            avgCost?: number;
-            usesMargin?: boolean;
-            cashShareCount?: number;
-            cashAvgCost?: number;
-            marginShareCount?: number;
-            marginAvgCost?: number;
-          } | null;
-          error?: string;
-        };
-        if (!response.ok) {
-          return;
-        }
-        if (cancelled) return;
-        if (!data.holding) {
-          setHoldingLoadedFor(id);
-          return;
-        }
-        const h = data.holding;
-        if (h.cashShareCount || h.marginShareCount) {
-          if (h.cashShareCount) {
-            setCashShareCount(String(h.cashShareCount));
-            setCashAvgCost(String(h.cashAvgCost ?? ""));
-          }
-          if (h.marginShareCount) {
-            const lots = sharesToLots(h.marginShareCount);
-            setMarginLotCount(
-              lots != null ? String(lots) : String(Math.round(h.marginShareCount / 1000)),
+      await Promise.all(
+        targets.map(async ({ index, id }) => {
+          try {
+            const response = await fetch(
+              `/api/holdings?stockId=${encodeURIComponent(id)}`,
             );
-            setMarginAvgCost(String(h.marginAvgCost ?? ""));
+            const data = (await response.json()) as {
+              holding?: {
+                shareCount?: number;
+                avgCost?: number;
+                usesMargin?: boolean;
+                cashShareCount?: number;
+                cashAvgCost?: number;
+                marginShareCount?: number;
+                marginAvgCost?: number;
+              } | null;
+            };
+            if (!response.ok || cancelled) {
+              return;
+            }
+            setSlotHoldings((prev) => {
+              const next = [...prev];
+              const current = next[index] ?? emptySlotHolding();
+              if (slotHoldingHasAnyInput(current)) {
+                return prev;
+              }
+              next[index] = data.holding
+                ? holdingRecordToSlot(data.holding)
+                : emptySlotHolding();
+              return next;
+            });
+            setHoldingLoadedFor((prev) => {
+              const next = [...prev];
+              next[index] = id;
+              return next;
+            });
+          } catch {
+            // ignore
           }
-        } else if (h.shareCount && h.avgCost) {
-          if (h.usesMargin) {
-            const lots = sharesToLots(h.shareCount);
-            setMarginLotCount(
-              lots != null ? String(lots) : String(Math.round(h.shareCount / 1000)),
-            );
-            setMarginAvgCost(String(h.avgCost));
-          } else {
-            setCashShareCount(String(h.shareCount));
-            setCashAvgCost(String(h.avgCost));
-          }
-        }
-        setHoldingLoadedFor(id);
-      } catch {
-        // ignore
-      }
+        }),
+      );
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [
-    isHolding,
-    primaryStockId,
-    holdingLoadedFor,
-    cashShareCount,
-    cashAvgCost,
-    marginLotCount,
-    marginAvgCost,
-  ]);
+  }, [isHolding, stockIds, stockSlotCount, holdingLoadedFor]);
 
   useEffect(() => {
     if (!isHolding) return;
-    const id = normalizedStockId(primaryStockId);
-    if (!id) return;
-
-    const cashShares = cashShareCount ? Number(cashShareCount) : 0;
-    const cashCost = cashAvgCost ? Number(cashAvgCost) : undefined;
-    const marginLots = marginLotCount ? Number(marginLotCount) : 0;
-    const mCost = marginAvgCost ? Number(marginAvgCost) : undefined;
-
-    const cashOk =
-      cashShares > 0 && cashCost !== undefined && Number.isFinite(cashCost) && cashCost > 0;
-    const marginOk =
-      marginLots > 0 &&
-      Number.isInteger(marginLots) &&
-      mCost !== undefined &&
-      Number.isFinite(mCost) &&
-      mCost > 0;
-    if (!cashOk && !marginOk) return;
 
     const handle = window.setTimeout(() => {
-      void fetch("/api/holdings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          stockId: id,
-          ...(cashOk
-            ? { cashShareCount: cashShares, cashAvgCost: cashCost }
-            : {}),
-          ...(marginOk
-            ? { marginLotCount: marginLots, marginAvgCost: mCost }
-            : {}),
-        }),
-      });
+      for (let index = 0; index < stockSlotCount; index += 1) {
+        const id = normalizedStockId(stockIds[index] ?? "");
+        if (!id) continue;
+        const parsed = parseSlotHolding(
+          slotHoldings[index] ?? emptySlotHolding(),
+        );
+        if (!parsed.cashOk && !parsed.marginOk) continue;
+        void fetch("/api/holdings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            stockId: id,
+            ...(parsed.cashOk
+              ? {
+                  cashShareCount: parsed.cashShares,
+                  cashAvgCost: parsed.cashCost,
+                }
+              : {}),
+            ...(parsed.marginOk
+              ? {
+                  marginLotCount: parsed.marginLots,
+                  marginAvgCost: parsed.marginCost,
+                }
+              : {}),
+          }),
+        });
+      }
     }, 400);
 
     return () => {
       window.clearTimeout(handle);
     };
-  }, [
-    isHolding,
-    primaryStockId,
-    cashShareCount,
-    cashAvgCost,
-    marginLotCount,
-    marginAvgCost,
-  ]);
+  }, [isHolding, stockIds, stockSlotCount, slotHoldings]);
 
   useEffect(() => {
     if (reports.length === 0) return;
@@ -444,26 +536,19 @@ export function TwStockDashboard() {
   }
 
   function applyVoiceFields(fields: VoiceReportFields) {
-    setStockSlotCount(1);
-    setStockIds(Array.from({ length: maxStockSlots }, (_, i) => (i === 0 ? fields.stockId.trim() : "")));
-    setIsHolding(fields.isHolding);
-    if (!fields.isHolding) {
-      setCashShareCount("");
-      setCashAvgCost("");
-      setMarginLotCount("");
-      setMarginAvgCost("");
-    } else if (fields.usesMargin) {
-      setCashShareCount("");
-      setCashAvgCost("");
-      setMarginLotCount(voiceMarginToLots(fields.shareCount));
-      setMarginAvgCost(fields.avgCost);
-    } else {
-      setCashShareCount(fields.shareCount);
-      setCashAvgCost(fields.avgCost);
-      setMarginLotCount("");
-      setMarginAvgCost("");
+    const holding = emptySlotHolding();
+    if (fields.isHolding && fields.usesMargin) {
+      holding.marginLotCount = voiceMarginToLots(fields.shareCount);
+      holding.marginAvgCost = fields.avgCost;
+    } else if (fields.isHolding) {
+      holding.cashShareCount = fields.shareCount;
+      holding.cashAvgCost = fields.avgCost;
     }
-    setHoldingLoadedFor(fields.stockId.trim() || null);
+    setStockSlotCount(1);
+    setStockIds([fields.stockId.trim()]);
+    setIsHolding(fields.isHolding);
+    setSlotHoldings([holding]);
+    setHoldingLoadedFor([fields.stockId.trim() || null]);
   }
 
   function closeVoiceModal() {
@@ -490,70 +575,63 @@ export function TwStockDashboard() {
     applyVoiceFields(fields);
     setSentNotice("");
     closeVoiceModal();
+    const holding = emptySlotHolding();
+    if (fields.isHolding && fields.usesMargin) {
+      holding.marginLotCount = voiceMarginToLots(fields.shareCount);
+      holding.marginAvgCost = fields.avgCost;
+    } else if (fields.isHolding) {
+      holding.cashShareCount = fields.shareCount;
+      holding.cashAvgCost = fields.avgCost;
+    }
     await createReportFromFields({
-      stockIds: [fields.stockId.trim()],
+      stocks: [{ stockId: fields.stockId.trim(), holding }],
       isHolding: fields.isHolding,
-      cashShareCount: fields.isHolding && !fields.usesMargin ? fields.shareCount : "",
-      cashAvgCost: fields.isHolding && !fields.usesMargin ? fields.avgCost : "",
-      marginLotCount:
-        fields.isHolding && fields.usesMargin
-          ? voiceMarginToLots(fields.shareCount)
-          : "",
-      marginAvgCost: fields.isHolding && fields.usesMargin ? fields.avgCost : "",
     });
   }
 
   async function createReportFromFields(fields: {
-    stockIds: string[];
+    stocks: Array<{ stockId: string; holding: SlotHolding }>;
     isHolding: boolean;
-    cashShareCount: string;
-    cashAvgCost: string;
-    marginLotCount: string;
-    marginAvgCost: string;
   }) {
     setError("");
     setLoading(true);
 
-    const uniqueIds = Array.from(
-      new Set(
-        fields.stockIds
-          .map((id) => id.trim())
-          .filter((id) => /^\d{4,6}$/.test(id)),
-      ),
-    );
+    const seen = new Set<string>();
+    const jobs: Array<{ id: string; holding: SlotHolding }> = [];
+    for (const stock of fields.stocks) {
+      const id = stock.stockId.trim();
+      if (!/^\d{4,6}$/.test(id) || seen.has(id)) continue;
+      seen.add(id);
+      jobs.push({ id, holding: stock.holding });
+    }
 
-    if (uniqueIds.length === 0) {
+    if (jobs.length === 0) {
       setError("請至少填一個 4～6 碼台股代號");
       setLoading(false);
       return;
     }
 
-    if (fields.isHolding && uniqueIds.length > 1) {
-      setError("持股分析一次只能送一檔；多檔請關閉「有持股」");
-      setLoading(false);
-      return;
-    }
-
     try {
-      const cashShares = fields.cashShareCount ? Number(fields.cashShareCount) : 0;
-      const cashCost = fields.cashAvgCost ? Number(fields.cashAvgCost) : undefined;
-      const marginLots = fields.marginLotCount ? Number(fields.marginLotCount) : 0;
-      const mCost = fields.marginAvgCost ? Number(fields.marginAvgCost) : undefined;
-
-      const holdingBody = fields.isHolding
-        ? {
-            isHolding: true as const,
-            ...(cashShares > 0 && cashCost
-              ? { cashShareCount: cashShares, cashAvgCost: cashCost }
-              : {}),
-            ...(marginLots > 0 && mCost
-              ? { marginLotCount: marginLots, marginAvgCost: mCost }
-              : {}),
-          }
-        : {};
-
       const results = await Promise.all(
-        uniqueIds.map(async (id) => {
+        jobs.map(async ({ id, holding }) => {
+          const parsed = parseSlotHolding(holding);
+          const holdingBody = fields.isHolding
+            ? {
+                isHolding: true as const,
+                ...(parsed.cashOk
+                  ? {
+                      cashShareCount: parsed.cashShares,
+                      cashAvgCost: parsed.cashCost,
+                    }
+                  : {}),
+                ...(parsed.marginOk
+                  ? {
+                      marginLotCount: parsed.marginLots,
+                      marginAvgCost: parsed.marginCost,
+                    }
+                  : {}),
+              }
+            : {};
           const response = await fetch("/api/reports", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -598,13 +676,13 @@ export function TwStockDashboard() {
           setOpenMonths((prev) => ({ ...prev, [`${year}-${month}`]: true }));
           setOpenDays((prev) => ({ ...prev, [dateKey]: true }));
         }
-        if (uniqueIds.length === 1 && created.length === 1) {
+        if (jobs.length === 1 && created.length === 1) {
           setSentNotice(
             `已開始分析 ${created[0]!.stockId}，可在下方列表查看進度，或開啟報告頁。`,
           );
         } else {
           setSentNotice(
-            `已送出 ${created.length} 檔分析（後端同時最多跑有限並行），可在下方列表同時追蹤進度。`,
+            `已送出 ${created.length} 檔分析（含持股／融資可並行；超出後端同時執行上限的會排隊），可在下方列表同時追蹤進度。`,
           );
         }
         resetStockSlots();
@@ -623,12 +701,11 @@ export function TwStockDashboard() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     await createReportFromFields({
-      stockIds: stockIds.slice(0, stockSlotCount),
+      stocks: stockIds.slice(0, stockSlotCount).map((stockId, index) => ({
+        stockId,
+        holding: slotHoldings[index] ?? emptySlotHolding(),
+      })),
       isHolding,
-      cashShareCount,
-      cashAvgCost,
-      marginLotCount,
-      marginAvgCost,
     });
   }
 
@@ -737,43 +814,30 @@ export function TwStockDashboard() {
             <div className="flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
                 <span className="whitespace-nowrap">分析檔數</span>
-                <select
-                  value={stockSlotCount}
-                  onChange={(event) =>
-                    changeStockSlotCount(Number(event.target.value))
-                  }
-                  disabled={loading || isHolding}
-                  className="rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-black"
-                >
-                  {Array.from({ length: maxStockSlots }, (_, i) => i + 1).map(
-                    (n) => (
-                      <option key={n} value={n}>
-                        {n} 檔
-                      </option>
-                    ),
-                  )}
-                </select>
-              </label>
-              {isHolding ? (
-                <span className="text-xs text-zinc-500">
-                  有持股時僅能分析 1 檔
-                </span>
-              ) : null}
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-              {stockIds.slice(0, stockSlotCount).map((value, index) => (
                 <input
-                  key={`stock-slot-${index}`}
-                  value={value}
-                  onChange={(event) => setStockIdAt(index, event.target.value)}
-                  placeholder={`股號 ${index + 1}（如 2330）`}
-                  inputMode="numeric"
-                  required={index === 0}
-                  title="4～6 碼台股代號"
-                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[9rem] dark:border-zinc-700 dark:bg-black"
+                  type="number"
+                  min={1}
+                  max={MAX_STOCK_SLOTS}
+                  value={slotCountInput}
+                  onChange={(event) => {
+                    const raw = event.target.value;
+                    setSlotCountInput(raw);
+                    const parsed = Number(raw);
+                    if (
+                      Number.isInteger(parsed) &&
+                      parsed >= 1 &&
+                      parsed <= MAX_STOCK_SLOTS
+                    ) {
+                      setStockSlotCount(parsed);
+                      ensureSlotCapacity(parsed);
+                    }
+                  }}
+                  onBlur={() => changeStockSlotCount(Number(slotCountInput))}
+                  disabled={loading}
+                  className="w-16 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-black"
                 />
-              ))}
+                <span className="text-xs text-zinc-500">檔（1～{MAX_STOCK_SLOTS}）</span>
+              </label>
               <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
                 <input
                   type="checkbox"
@@ -781,65 +845,121 @@ export function TwStockDashboard() {
                   onChange={(event) => {
                     const next = event.target.checked;
                     setIsHolding(next);
-                    if (next) {
-                      changeStockSlotCount(1);
-                    } else {
-                      setCashShareCount("");
-                      setCashAvgCost("");
-                      setMarginLotCount("");
-                      setMarginAvgCost("");
+                    if (!next) {
+                      setSlotHoldings((prev) => prev.map(() => emptySlotHolding()));
+                      setHoldingLoadedFor((prev) => prev.map(() => null));
                     }
                   }}
                   className="h-4 w-4 rounded border-zinc-300"
                 />
                 有持股
               </label>
-              {isHolding ? (
-                <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-medium text-zinc-500">現股</span>
-                    <input
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={cashShareCount}
-                      onChange={(event) => setCashShareCount(event.target.value)}
-                      placeholder="現股股數"
-                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
-                    />
-                    <input
-                      type="number"
-                      min={0.01}
-                      step={0.01}
-                      value={cashAvgCost}
-                      onChange={(event) => setCashAvgCost(event.target.value)}
-                      placeholder="現股均價"
-                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
-                    />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-medium text-zinc-500">融資</span>
-                    <input
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={marginLotCount}
-                      onChange={(event) => setMarginLotCount(event.target.value)}
-                      placeholder="融資張數"
-                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
-                    />
-                    <input
-                      type="number"
-                      min={0.01}
-                      step={0.01}
-                      value={marginAvgCost}
-                      onChange={(event) => setMarginAvgCost(event.target.value)}
-                      placeholder="融資均價"
-                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
-                    />
-                  </div>
-                </div>
-              ) : null}
+            </div>
+
+            {isHolding ? (
+              <div className="flex flex-col gap-2">
+                {stockIds.slice(0, stockSlotCount).map((value, index) => {
+                  const holding = slotHoldings[index] ?? emptySlotHolding();
+                  return (
+                    <div
+                      key={`stock-slot-${index}`}
+                      className="flex flex-col gap-2 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800 sm:flex-row sm:flex-wrap sm:items-center"
+                    >
+                      <input
+                        value={value}
+                        onChange={(event) =>
+                          setStockIdAt(index, event.target.value)
+                        }
+                        placeholder={`股號 ${index + 1}（如 2330）`}
+                        inputMode="numeric"
+                        required={index === 0}
+                        title="4～6 碼台股代號"
+                        className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[9rem] dark:border-zinc-700 dark:bg-black"
+                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-medium text-zinc-500">
+                          現股
+                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={holding.cashShareCount}
+                          onChange={(event) =>
+                            setSlotHoldingAt(index, {
+                              cashShareCount: event.target.value,
+                            })
+                          }
+                          placeholder="現股股數"
+                          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
+                        />
+                        <input
+                          type="number"
+                          min={0.01}
+                          step={0.01}
+                          value={holding.cashAvgCost}
+                          onChange={(event) =>
+                            setSlotHoldingAt(index, {
+                              cashAvgCost: event.target.value,
+                            })
+                          }
+                          placeholder="現股均價"
+                          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
+                        />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-medium text-zinc-500">
+                          融資
+                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={holding.marginLotCount}
+                          onChange={(event) =>
+                            setSlotHoldingAt(index, {
+                              marginLotCount: event.target.value,
+                            })
+                          }
+                          placeholder="融資張數"
+                          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
+                        />
+                        <input
+                          type="number"
+                          min={0.01}
+                          step={0.01}
+                          value={holding.marginAvgCost}
+                          onChange={(event) =>
+                            setSlotHoldingAt(index, {
+                              marginAvgCost: event.target.value,
+                            })
+                          }
+                          placeholder="融資均價"
+                          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                {stockIds.slice(0, stockSlotCount).map((value, index) => (
+                  <input
+                    key={`stock-slot-${index}`}
+                    value={value}
+                    onChange={(event) => setStockIdAt(index, event.target.value)}
+                    placeholder={`股號 ${index + 1}（如 2330）`}
+                    inputMode="numeric"
+                    required={index === 0}
+                    title="4～6 碼台股代號"
+                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[9rem] dark:border-zinc-700 dark:bg-black"
+                  />
+                ))}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
               <input
                 type="date"
                 value={tradeDate}
@@ -856,7 +976,7 @@ export function TwStockDashboard() {
             </div>
           </div>
           <p className="text-xs text-zinc-500">
-            交易日期已依證交所開休市日期表自動帶入，並以加權指數成交確認臨時休市（21:30 前用前一交易日、之後用當日；休市日順延至最近交易日），可自行調整；清空則由系統使用最近交易日。有持股時請至少填現股（股）或融資（張，1 張＝1000 股）一組；可同時填兩組，系統會分開分析並給綜合結論。多檔分析請用上方「分析檔數」展開輸入框（最多 4 檔）。
+            交易日期已依證交所開休市日期表自動帶入，並以加權指數成交確認臨時休市（21:30 前用前一交易日、之後用當日；休市日順延至最近交易日），可自行調整；清空則由系統使用最近交易日。有持股時請為每一檔至少填現股（股）或融資（張，1 張＝1000 股）一組；可同時填兩組，系統會分開分析並給綜合結論。已儲存的持股會依股號自動帶入。多檔分析請用上方「分析檔數」決定要展開幾個輸入框（1～{MAX_STOCK_SLOTS} 檔），含融資也可一次送出並行。
           </p>
         </form>
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
