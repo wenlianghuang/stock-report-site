@@ -238,7 +238,10 @@ export function TwStockDashboard() {
             existing.status !== updated.status ||
             existing.stockName !== updated.stockName ||
             existing.tradeDate !== updated.tradeDate ||
-            existing.error !== updated.error
+            existing.error !== updated.error ||
+            Boolean(existing.markdown) !== Boolean(updated.markdown) ||
+            Boolean(existing.positionMarkdown) !==
+              Boolean(updated.positionMarkdown)
           ) {
             byId.set(updated.id, updated);
             changed = true;
@@ -1035,7 +1038,16 @@ export function TwStockDashboard() {
                                                   </p>
                                                 </div>
                                                 <div className="flex items-center gap-3">
-                                                  <ReportStatusBadge status={report.status} />
+                                                  <ReportStatusBadge
+                                                    status={report.status}
+                                                    isHolding={report.isHolding}
+                                                    hasMarketMarkdown={Boolean(
+                                                      report.markdown,
+                                                    )}
+                                                    hasPositionMarkdown={Boolean(
+                                                      report.positionMarkdown,
+                                                    )}
+                                                  />
                                                   <Link
                                                     href={`/reports/${report.id}`}
                                                     className="text-sm font-medium text-zinc-900 underline dark:text-zinc-100"

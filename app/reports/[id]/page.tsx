@@ -185,10 +185,14 @@ export default function ReportPage() {
         return (
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             {status === "positioning"
-              ? "部位決策報告產生中…"
+              ? "市場報告已完成，部位報告產生中…"
               : status === "gating"
-                ? "市場報告完成後將接續產出部位決策報告…"
-                : "部位決策報告尚未就緒。"}
+                ? "市場報告完成後將接續產出部位報告…"
+                : status === "done"
+                  ? "部位報告尚未產出（市場報告可於「市場報告」分頁查看）。"
+                  : status === "failed"
+                    ? "部位報告產生失敗；市場報告若已完成仍可查看。"
+                    : "部位報告尚未就緒。"}
           </p>
         );
       }
@@ -250,7 +254,14 @@ export default function ReportPage() {
           </h1>
         </div>
         <div className="flex items-center gap-3">
-          {status ? <ReportStatusBadge status={status} /> : null}
+          {status ? (
+            <ReportStatusBadge
+              status={status}
+              isHolding={report?.isHolding}
+              hasMarketMarkdown={Boolean(marketMarkdown)}
+              hasPositionMarkdown={Boolean(positionMarkdown)}
+            />
+          ) : null}
           {report ? (
             <button
               type="button"
@@ -266,7 +277,11 @@ export default function ReportPage() {
 
       {status ? (
         <p className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
-          {statusHint(status)}
+          {statusHint(status, {
+            isHolding: report?.isHolding,
+            hasMarketMarkdown: Boolean(marketMarkdown),
+            hasPositionMarkdown: Boolean(positionMarkdown),
+          })}
         </p>
       ) : null}
 
