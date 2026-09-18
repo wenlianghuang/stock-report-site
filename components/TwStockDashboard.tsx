@@ -110,7 +110,11 @@ function groupReportsByDate(reports: ReportRecord[]): ReportGroup[] {
 }
 
 export function TwStockDashboard() {
-  const [stockId, setStockId] = useState("");
+  const maxStockSlots = 4;
+  const [stockSlotCount, setStockSlotCount] = useState(1);
+  const [stockIds, setStockIds] = useState<string[]>(() =>
+    Array.from({ length: maxStockSlots }, () => ""),
+  );
   const [tradeDate, setTradeDate] = useState(computeDefaultTradeDate);
   const [isHolding, setIsHolding] = useState(false);
   const [cashShareCount, setCashShareCount] = useState("");
@@ -131,9 +135,37 @@ export function TwStockDashboard() {
   const [inputMode, setInputMode] = useState<"text" | "voice">("text");
   const [voiceModalOpen, setVoiceModalOpen] = useState(false);
 
+  const primaryStockId = stockIds[0] ?? "";
+
   function normalizedStockId(value: string) {
     const id = value.trim();
     return /^\d{4,6}$/.test(id) ? id : "";
+  }
+
+  function setStockIdAt(index: number, value: string) {
+    setStockIds((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  }
+
+  function changeStockSlotCount(nextCount: number) {
+    const count = Math.min(maxStockSlots, Math.max(1, nextCount));
+    setStockSlotCount(count);
+    if (count > 1 && isHolding) {
+      setIsHolding(false);
+      setCashShareCount("");
+      setCashAvgCost("");
+      setMarginLotCount("");
+      setMarginAvgCost("");
+      setHoldingLoadedFor(null);
+    }
+  }
+
+  function resetStockSlots() {
+    setStockIds(Array.from({ length: maxStockSlots }, () => ""));
+    setStockSlotCount(1);
   }
 
   async function loadReports() {
@@ -256,7 +288,7 @@ export function TwStockDashboard() {
 
   useEffect(() => {
     if (!isHolding) return;
-    const id = normalizedStockId(stockId);
+    const id = normalizedStockId(primaryStockId);
     if (!id) return;
     if (holdingLoadedFor === id) return;
 
@@ -327,7 +359,7 @@ export function TwStockDashboard() {
     };
   }, [
     isHolding,
-    stockId,
+    primaryStockId,
     holdingLoadedFor,
     cashShareCount,
     cashAvgCost,
@@ -337,7 +369,7 @@ export function TwStockDashboard() {
 
   useEffect(() => {
     if (!isHolding) return;
-    const id = normalizedStockId(stockId);
+    const id = normalizedStockId(primaryStockId);
     if (!id) return;
 
     const cashShares = cashShareCount ? Number(cashShareCount) : 0;
@@ -376,7 +408,7 @@ export function TwStockDashboard() {
     };
   }, [
     isHolding,
-    stockId,
+    primaryStockId,
     cashShareCount,
     cashAvgCost,
     marginLotCount,
@@ -409,7 +441,8 @@ export function TwStockDashboard() {
   }
 
   function applyVoiceFields(fields: VoiceReportFields) {
-    setStockId(fields.stockId.trim());
+    setStockSlotCount(1);
+    setStockIds(Array.from({ length: maxStockSlots }, (_, i) => (i === 0 ? fields.stockId.trim() : "")));
     setIsHolding(fields.isHolding);
     if (!fields.isHolding) {
       setCashShareCount("");
@@ -455,7 +488,7 @@ export function TwStockDashboard() {
     setSentNotice("");
     closeVoiceModal();
     await createReportFromFields({
-      stockId: fields.stockId.trim(),
+      stockIds: [fields.stockId.trim()],
       isHolding: fields.isHolding,
       cashShareCount: fields.isHolding && !fields.usesMargin ? fields.shareCount : "",
       cashAvgCost: fields.isHolding && !fields.usesMargin ? fields.avgCost : "",
@@ -468,7 +501,7 @@ export function TwStockDashboard() {
   }
 
   async function createReportFromFields(fields: {
-    stockId: string;
+    stockIds: string[];
     isHolding: boolean;
     cashShareCount: string;
     cashAvgCost: string;
@@ -478,20 +511,22 @@ export function TwStockDashboard() {
     setError("");
     setLoading(true);
 
-    const stockIds = fields.stockId
-      .split(/[,，\s]+/)
-      .map((id) => id.trim())
-      .filter((id) => /^\d{4,6}$/.test(id));
-    const uniqueIds = Array.from(new Set(stockIds));
+    const uniqueIds = Array.from(
+      new Set(
+        fields.stockIds
+          .map((id) => id.trim())
+          .filter((id) => /^\d{4,6}$/.test(id)),
+      ),
+    );
 
     if (uniqueIds.length === 0) {
-      setError("請輸入 4～6 碼台股代號（可逗號分隔多檔）");
+      setError("請至少填一個 4～6 碼台股代號");
       setLoading(false);
       return;
     }
 
     if (fields.isHolding && uniqueIds.length > 1) {
-      setError("持股分析一次只能送一檔；多檔請關閉「持股分析」");
+      setError("持股分析一次只能送一檔；多檔請關閉「有持股」");
       setLoading(false);
       return;
     }
@@ -569,7 +604,7 @@ export function TwStockDashboard() {
             `已送出 ${created.length} 檔分析（後端同時最多跑有限並行），可在下方列表同時追蹤進度。`,
           );
         }
-        setStockId("");
+        resetStockSlots();
       }
 
       if (failures.length > 0) {
@@ -585,7 +620,7 @@ export function TwStockDashboard() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     await createReportFromFields({
-      stockId,
+      stockIds: stockIds.slice(0, stockSlotCount),
       isHolding,
       cashShareCount,
       cashAvgCost,
@@ -695,95 +730,130 @@ export function TwStockDashboard() {
         />
 
         <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-            <input
-              value={stockId}
-              onChange={(event) => setStockId(event.target.value)}
-              placeholder="2330 或 2330,2317,2454"
-              required
-              title="4～6 碼代號；多檔可用逗號或空白分隔"
-              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[16rem] dark:border-zinc-700 dark:bg-black"
-            />
-            <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-              <input
-                type="checkbox"
-                checked={isHolding}
-                onChange={(event) => {
-                  const next = event.target.checked;
-                  setIsHolding(next);
-                  if (!next) {
-                    setCashShareCount("");
-                    setCashAvgCost("");
-                    setMarginLotCount("");
-                    setMarginAvgCost("");
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                <span className="whitespace-nowrap">分析檔數</span>
+                <select
+                  value={stockSlotCount}
+                  onChange={(event) =>
+                    changeStockSlotCount(Number(event.target.value))
                   }
-                }}
-                className="h-4 w-4 rounded border-zinc-300"
+                  disabled={loading || isHolding}
+                  className="rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-black"
+                >
+                  {Array.from({ length: maxStockSlots }, (_, i) => i + 1).map(
+                    (n) => (
+                      <option key={n} value={n}>
+                        {n} 檔
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              {isHolding ? (
+                <span className="text-xs text-zinc-500">
+                  有持股時僅能分析 1 檔
+                </span>
+              ) : null}
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              {stockIds.slice(0, stockSlotCount).map((value, index) => (
+                <input
+                  key={`stock-slot-${index}`}
+                  value={value}
+                  onChange={(event) => setStockIdAt(index, event.target.value)}
+                  placeholder={`股號 ${index + 1}（如 2330）`}
+                  inputMode="numeric"
+                  required={index === 0}
+                  title="4～6 碼台股代號"
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[9rem] dark:border-zinc-700 dark:bg-black"
+                />
+              ))}
+              <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={isHolding}
+                  onChange={(event) => {
+                    const next = event.target.checked;
+                    setIsHolding(next);
+                    if (next) {
+                      changeStockSlotCount(1);
+                    } else {
+                      setCashShareCount("");
+                      setCashAvgCost("");
+                      setMarginLotCount("");
+                      setMarginAvgCost("");
+                    }
+                  }}
+                  className="h-4 w-4 rounded border-zinc-300"
+                />
+                有持股
+              </label>
+              {isHolding ? (
+                <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-zinc-500">現股</span>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={cashShareCount}
+                      onChange={(event) => setCashShareCount(event.target.value)}
+                      placeholder="現股股數"
+                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
+                    />
+                    <input
+                      type="number"
+                      min={0.01}
+                      step={0.01}
+                      value={cashAvgCost}
+                      onChange={(event) => setCashAvgCost(event.target.value)}
+                      placeholder="現股均價"
+                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-zinc-500">融資</span>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={marginLotCount}
+                      onChange={(event) => setMarginLotCount(event.target.value)}
+                      placeholder="融資張數"
+                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
+                    />
+                    <input
+                      type="number"
+                      min={0.01}
+                      step={0.01}
+                      value={marginAvgCost}
+                      onChange={(event) => setMarginAvgCost(event.target.value)}
+                      placeholder="融資均價"
+                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
+                    />
+                  </div>
+                </div>
+              ) : null}
+              <input
+                type="date"
+                value={tradeDate}
+                onChange={(event) => setTradeDate(event.target.value)}
+                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[11rem] dark:border-zinc-700 dark:bg-black"
               />
-              有持股
-            </label>
-            {isHolding ? (
-              <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-medium text-zinc-500">現股</span>
-                  <input
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={cashShareCount}
-                    onChange={(event) => setCashShareCount(event.target.value)}
-                    placeholder="現股股數"
-                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
-                  />
-                  <input
-                    type="number"
-                    min={0.01}
-                    step={0.01}
-                    value={cashAvgCost}
-                    onChange={(event) => setCashAvgCost(event.target.value)}
-                    placeholder="現股均價"
-                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
-                  />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-medium text-zinc-500">融資</span>
-                  <input
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={marginLotCount}
-                    onChange={(event) => setMarginLotCount(event.target.value)}
-                    placeholder="融資張數"
-                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
-                  />
-                  <input
-                    type="number"
-                    min={0.01}
-                    step={0.01}
-                    value={marginAvgCost}
-                    onChange={(event) => setMarginAvgCost(event.target.value)}
-                    placeholder="融資均價"
-                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[8rem] dark:border-zinc-700 dark:bg-black"
-                  />
-                </div>
-              </div>
-            ) : null}
-            <input
-              type="date"
-              value={tradeDate}
-              onChange={(event) => setTradeDate(event.target.value)}
-              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:max-w-[11rem] dark:border-zinc-700 dark:bg-black"
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
-            >
-              {loading ? "建立中…" : "開始分析"}
-            </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
+              >
+                {loading ? "建立中…" : "開始分析"}
+              </button>
+            </div>
           </div>
           <p className="text-xs text-zinc-500">
-            交易日期已依證交所開休市日期表自動帶入，並以加權指數成交確認臨時休市（21:30 前用前一交易日、之後用當日；休市日順延至最近交易日），可自行調整；清空則由系統使用最近交易日。有持股時請至少填現股（股）或融資（張，1 張＝1000 股）一組；可同時填兩組，系統會分開分析並給綜合結論。
+            交易日期已依證交所開休市日期表自動帶入，並以加權指數成交確認臨時休市（21:30 前用前一交易日、之後用當日；休市日順延至最近交易日），可自行調整；清空則由系統使用最近交易日。有持股時請至少填現股（股）或融資（張，1 張＝1000 股）一組；可同時填兩組，系統會分開分析並給綜合結論。多檔分析請用上方「分析檔數」展開輸入框（最多 4 檔）。
           </p>
         </form>
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
