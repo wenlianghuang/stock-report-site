@@ -27,6 +27,31 @@ export type InstitutionalFlowDay = {
   major?: number | null;
 };
 
+export type BaseRateHorizon = {
+  p_up?: number | null;
+  excess?: number | null;
+  n?: number;
+};
+
+export type BaseRateRow = {
+  key: string;
+  dimension: string;
+  state: string;
+  h3: BaseRateHorizon;
+  h5: BaseRateHorizon;
+  sample_n: number;
+  confidence: string;
+};
+
+export type BaseRateTable = {
+  title: string;
+  note: string;
+  rows: BaseRateRow[];
+  edge?: number | null;
+  tilt?: string;
+  tilt_note?: string;
+};
+
 export type MarketSummary = {
   version: number;
   stock_id: string;
@@ -54,6 +79,7 @@ export type MarketSummary = {
     watch_items: string[];
   };
   anchors: string[];
+  base_rate?: BaseRateTable | null;
 };
 
 export type PositionScenarioPlan = {
@@ -130,12 +156,44 @@ export type ChipFacts = {
   stock_id?: string;
   stock_name?: string;
   trade_date?: string;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
   close?: number | null;
+  today_change_pct?: number | null;
   ma5?: number | null;
   ma10?: number | null;
   ma20?: number | null;
+  close_vs_ma5_pct?: number | null;
+  close_vs_ma10_pct?: number | null;
   close_vs_ma20_pct?: number | null;
+  foreign_net_lots?: number | null;
+  trust_net_lots?: number | null;
+  dealer_net_lots?: number | null;
+  major_net_lots?: number | null;
+  major_available?: boolean;
+  major_volume_pct?: number | null;
+  margin_today_lots?: number | null;
+  margin_today_delta_lots?: number | null;
+  short_today_lots?: number | null;
+  short_today_delta_lots?: number | null;
+  volume_today_lots?: number | null;
+  day_trade_volume_lots?: number | null;
+  day_trade_ratio_pct?: number | null;
+  borrow_sell_today_lots?: number | null;
+  borrow_return_lots?: number | null;
+  lookback_days?: number | null;
+  lookback_start?: string;
   period_return_pct?: number | null;
+  foreign_cum_lots?: number | null;
+  trust_cum_lots?: number | null;
+  dealer_cum_lots?: number | null;
+  major_cum_lots?: number | null;
+  major_history_days?: number | null;
+  margin_delta_lots?: number | null;
+  short_delta_lots?: number | null;
+  avg_volume_lots?: number | null;
+  avg_day_trade_ratio_pct?: number | null;
   price_trend?: string;
   ma5_position?: string;
   ma10_position?: string;
@@ -148,12 +206,32 @@ export type ChipFacts = {
   ma20_slope_pct?: number | null;
   rsi_14?: number | null;
   rsi_zone?: string;
+  atr_14?: number | null;
+  atr_pct?: number | null;
+  adx_14?: number | null;
+  trend_strength?: string;
+  volatility_regime?: string;
+  margin_short_ratio_pct?: number | null;
+  margin_short_ratio_zone?: string;
+  margin_momentum_pct?: number | null;
+  margin_momentum?: string;
+  high_20d?: number | null;
+  low_20d?: number | null;
   institutional_consensus?: string;
   chip_regime?: string;
   volume_anomaly?: string;
   rs_today?: string;
   rs_period?: string;
+  market_close?: number | null;
+  market_change_pct?: number | null;
+  market_period_return_pct?: number | null;
   market_trend?: string;
+  market_ma5?: number | null;
+  market_ma20?: number | null;
+  market_close_vs_ma5_pct?: number | null;
+  market_close_vs_ma20_pct?: number | null;
+  market_ma5_position?: string;
+  market_ma20_position?: string;
   divergences?: string[];
   anchors?: string[];
 };

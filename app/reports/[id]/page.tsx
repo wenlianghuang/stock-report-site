@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MarkdownReport } from "@/components/MarkdownReport";
 import { ReportChartsPanel } from "@/components/ReportChartsPanel";
+import { ReportDataTablesPanel } from "@/components/ReportDataTablesPanel";
 import { ReportSummaryPanel } from "@/components/ReportSummaryPanel";
 import {
   ReportStatusBadge,
@@ -13,7 +14,7 @@ import {
 import type { ReportRecord, ReportStatus } from "@/lib/types";
 import { formatMarginQuantity } from "@/lib/holding-legs";
 
-type ReportTab = "summary" | "chart" | "market" | "position";
+type ReportTab = "summary" | "data" | "chart" | "market" | "position";
 
 type ReportPayload = {
   report: ReportRecord;
@@ -95,6 +96,11 @@ export default function ReportPage() {
   const hasPositionReport = Boolean(report?.isHolding);
   const hasChartData = Boolean(report?.factsJson && report?.historyJson?.length);
   const hasSummary = Boolean(report?.summaryJson?.market);
+  const hasDataTables = Boolean(
+    report?.factsJson ||
+      report?.summaryJson?.market ||
+      report?.historyJson?.length,
+  );
   const marketMarkdown = payload?.markdown ?? report?.markdown ?? null;
   const positionMarkdown =
     payload?.positionMarkdown ?? report?.positionMarkdown ?? null;
@@ -154,6 +160,27 @@ export default function ReportPage() {
         <ReportSummaryPanel
           summary={report!.summaryJson!}
           facts={report?.factsJson}
+        />
+      );
+    }
+
+    if (activeTab === "data") {
+      if (!hasDataTables) {
+        return (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            {status === "fetching"
+              ? "籌碼資料抓取中，數據表將在資料就緒後顯示…"
+              : "數據表尚未就緒。"}
+          </p>
+        );
+      }
+
+      return (
+        <ReportDataTablesPanel
+          report={report!}
+          facts={report?.factsJson}
+          history={report?.historyJson}
+          summary={report?.summaryJson}
         />
       );
     }
@@ -302,6 +329,13 @@ export default function ReportPage() {
               className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tabClass(activeTab === "summary")}`}
             >
               視覺摘要
+            </button>
+            <button
+              type="button"
+              onClick={() => selectTab("data")}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tabClass(activeTab === "data")}`}
+            >
+              數據
             </button>
             <button
               type="button"
