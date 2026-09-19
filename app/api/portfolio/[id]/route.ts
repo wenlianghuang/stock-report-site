@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { getPortfolioJob } from "@/lib/agent-client";
-import {
-  deletePortfolio,
-  findPortfolioById,
-  isValidPortfolioStatus,
-  updatePortfolio,
-} from "@/lib/db";
+import { deletePortfolio, findPortfolioById, updatePortfolio } from "@/lib/db";
+import { isValidPortfolioStatus } from "@/lib/validate";
 
 type RouteContext = {
   params: Promise<{ id: string }>;

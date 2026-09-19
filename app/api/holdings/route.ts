@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
-import {
-  findHoldingForUserStock,
-  isValidAvgCost,
-  isValidShareCount,
-  isValidStockId,
-  upsertHoldingForUserStock,
-} from "@/lib/db";
+import { findHoldingForUserStock, upsertHoldingForUserStock } from "@/lib/db";
+import { isValidAvgCost, isValidShareCount, isValidStockId } from "@/lib/validate";
 import { blendHoldingLegs } from "@/lib/holding-legs";
 import { requireUser } from "@/lib/auth";
 

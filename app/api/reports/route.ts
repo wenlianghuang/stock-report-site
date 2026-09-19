@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
+import { createReport, listReportsForUser } from "@/lib/db";
 import {
-  createReport,
   isValidAvgCost,
   isValidShareCount,
   isValidStockId,
   isValidTradeDate,
-  listReportsForUser,
-} from "@/lib/db";
+} from "@/lib/validate";
 import { blendHoldingLegs } from "@/lib/holding-legs";
 import { requireUser } from "@/lib/auth";
 import { checkAgentHealth, createAgentJob } from "@/lib/agent-client";

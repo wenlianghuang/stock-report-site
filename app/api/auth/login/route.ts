@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { mapAuthError, requireUser } from "@/lib/auth";
+import { mapAuthError } from "@/lib/auth-errors";
+import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {

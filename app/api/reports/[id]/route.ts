@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
-import {
-  deleteReport,
-  findReportById,
-  isValidReportStatus,
-  updateReport,
-} from "@/lib/db";
+import { deleteReport, findReportById, updateReport } from "@/lib/db";
+import { isValidReportStatus } from "@/lib/validate";
 import { requireUser } from "@/lib/auth";
 import { getAgentJob } from "@/lib/agent-client";
 

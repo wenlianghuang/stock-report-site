@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { createDailyDigest } from "@/lib/agent-client";
-import { isValidTradeDate, listDoneReportsForUserByTradeDate } from "@/lib/db";
+import { listDoneReportsForUserByTradeDate } from "@/lib/db";
+import { isValidTradeDate } from "@/lib/validate";
 import { markdownToEmailHtml, sendEmail } from "@/lib/email";
 
 export async function POST(request: Request) {

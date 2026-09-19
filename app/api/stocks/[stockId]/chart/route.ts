@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { isValidStockId, isValidTradeDate } from "@/lib/db";
+import { isValidStockId, isValidTradeDate } from "@/lib/validate";
 import { checkAgentHealth, getStockChart } from "@/lib/agent-client";
 
 /** Allow on-demand stock-report fetch when chart CSV is missing. */

@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { checkAgentHealth, createPortfolioJob } from "@/lib/agent-client";
+import { createPortfolio, listPortfoliosForUser } from "@/lib/db";
 import {
-  createPortfolio,
   isValidPortfolioAmount,
   isValidPortfolioMode,
   isValidPortfolioProfile,
   isValidPortfolioThemes,
   isValidTradeDate,
-  listPortfoliosForUser,
-} from "@/lib/db";
+} from "@/lib/validate";
 
 function themeSlug(themes: string[]): string {
   return `theme_${[...themes].sort().join("_")}`;

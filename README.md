@@ -82,7 +82,15 @@ npm run dev
 
 開啟 [http://localhost:3000](http://localhost:3000) → 註冊 → 輸入股號（或語音填表）。
 
-### 5. 測試 Auth API
+### 5. 測試
+
+單元測試（不需 `.env`、不需 dev server）：
+
+```bash
+npm test
+```
+
+Auth API 整合腳本仍要本機 server：
 
 ```bash
 npm run dev   # 另一個終端
