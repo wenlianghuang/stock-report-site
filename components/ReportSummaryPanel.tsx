@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { ChipFactsTables } from "@/components/ChipFactsTables";
 import { FactsBadges } from "@/components/FactsBadges";
 import { CHART_COLORS } from "@/lib/chart-colors";
 import { formatChartDate } from "@/lib/chart-utils";
@@ -18,6 +19,7 @@ import type {
   MarketSummary,
   PositionSummary,
   ReportSummaryJson,
+  HistoryDay,
   SummaryTone,
 } from "@/lib/types";
 import { formatMarginQuantity } from "@/lib/holding-legs";
@@ -497,9 +499,10 @@ function PositionSummarySection({ position }: { position: PositionSummary }) {
 type ReportSummaryPanelProps = {
   summary: ReportSummaryJson;
   facts?: ChipFacts;
+  history?: HistoryDay[];
 };
 
-export function ReportSummaryPanel({ summary, facts }: ReportSummaryPanelProps) {
+export function ReportSummaryPanel({ summary, facts, history }: ReportSummaryPanelProps) {
   const market = summary.market;
 
   return (
@@ -513,6 +516,14 @@ export function ReportSummaryPanel({ summary, facts }: ReportSummaryPanelProps) 
       <SectionCard title="關鍵數字">
         <KeyMetricsGrid market={market} />
       </SectionCard>
+
+      {facts ? (
+        <ChipFactsTables
+          facts={facts}
+          history={history}
+          flow={market.institutional_flow}
+        />
+      ) : null}
 
       {market.institutional_flow.length > 0 ? (
         <SectionCard title="近 N 日法人買賣超">

@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ChipFactsTables } from "@/components/ChipFactsTables";
 import { MarkdownReport } from "@/components/MarkdownReport";
+import { PositionFactsTable } from "@/components/PositionFactsTable";
 import { ReportChartsPanel } from "@/components/ReportChartsPanel";
 import { ReportSummaryPanel } from "@/components/ReportSummaryPanel";
 import {
@@ -154,6 +156,7 @@ export default function ReportPage() {
         <ReportSummaryPanel
           summary={report!.summaryJson!}
           facts={report?.factsJson}
+          history={report?.historyJson}
         />
       );
     }
@@ -181,25 +184,36 @@ export default function ReportPage() {
     }
 
     if (activeTab === "position") {
-      if (!positionMarkdown) {
-        return (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            {status === "positioning"
-              ? "市場報告已完成，部位報告產生中…"
-              : status === "gating"
-                ? "市場報告完成後將接續產出部位報告…"
-                : status === "done"
-                  ? "部位報告尚未產出（市場報告可於「市場報告」分頁查看）。"
-                  : status === "failed"
-                    ? "部位報告產生失敗；市場報告若已完成仍可查看。"
-                    : "部位報告尚未就緒。"}
-          </p>
-        );
-      }
-      return <MarkdownReport markdown={positionMarkdown} />;
+      const waitingHint =
+        status === "positioning"
+          ? "市場報告已完成，部位敘事產生中…"
+          : status === "gating"
+            ? "市場報告完成後將接續產出部位報告…"
+            : status === "done"
+              ? "部位報告尚未產出（市場報告可於「市場報告」分頁查看）。"
+              : status === "failed"
+                ? "部位報告產生失敗；市場報告若已完成仍可查看。"
+                : "部位報告尚未就緒。";
+      return (
+        <div className="flex flex-col gap-6">
+          {report ? (
+            <PositionFactsTable
+              report={report}
+              facts={report.factsJson}
+              history={report.historyJson}
+              position={report.summaryJson?.position}
+            />
+          ) : null}
+          {positionMarkdown ? (
+            <MarkdownReport markdown={positionMarkdown} />
+          ) : (
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">{waitingHint}</p>
+          )}
+        </div>
+      );
     }
 
-    if (!marketMarkdown) {
+    if (!marketMarkdown && !report?.factsJson) {
       return (
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
           {status === "gating" || status === "fetching"
@@ -209,7 +223,18 @@ export default function ReportPage() {
       );
     }
 
-    return <MarkdownReport markdown={marketMarkdown} />;
+    return (
+      <div className="flex flex-col gap-6">
+        {report?.factsJson ? (
+          <ChipFactsTables
+            facts={report.factsJson}
+            history={report.historyJson}
+            flow={report.summaryJson?.market.institutional_flow}
+          />
+        ) : null}
+        {marketMarkdown ? <MarkdownReport markdown={marketMarkdown} /> : null}
+      </div>
+    );
   }
 
   const showContentPanel =
