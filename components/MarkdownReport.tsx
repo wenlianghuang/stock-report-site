@@ -4,7 +4,9 @@ import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-const BASE_RATE_HEADING_PREFIX = "### 歷史命中率";
+const BASE_RATE_HEADING_RE =
+  /^###\s+(歷史命中率|歷史 forward 對照)/m;
+const BASE_RATE_TITLE_FALLBACK = "歷史 forward 對照（相對大盤超額）";
 const SCENARIO_RANK_RE = /^(主線|次線|尾線)/;
 
 type SplitResult = {
@@ -18,12 +20,14 @@ type SplitResult = {
 // "---" separator that precedes the LLM analysis. Pull it out so it can render
 // inside a collapsed <details>, since react-markdown does not process our known
 // heading into a collapsible on its own.
+// Accept both legacy「歷史命中率」and current「歷史 forward 對照」headings.
 function splitBaseRate(markdown: string): SplitResult {
-  const start = markdown.indexOf(BASE_RATE_HEADING_PREFIX);
-  if (start === -1) {
+  const match = BASE_RATE_HEADING_RE.exec(markdown);
+  if (!match || match.index === undefined) {
     return { before: markdown, baseRateTitle: null, baseRateBody: "", after: "" };
   }
 
+  const start = match.index;
   const before = markdown.slice(0, start);
   const rest = markdown.slice(start);
 
@@ -35,7 +39,8 @@ function splitBaseRate(markdown: string): SplitResult {
 
   const newlineIdx = block.indexOf("\n");
   const headingLine = (newlineIdx === -1 ? block : block.slice(0, newlineIdx)).trim();
-  const baseRateTitle = headingLine.replace(/^#{1,6}\s*/, "") || "歷史命中率";
+  const baseRateTitle =
+    headingLine.replace(/^#{1,6}\s*/, "") || BASE_RATE_TITLE_FALLBACK;
   const baseRateBody = (newlineIdx === -1 ? "" : block.slice(newlineIdx + 1)).trim();
 
   return { before: before.trim(), baseRateTitle, baseRateBody, after: after.trim() };

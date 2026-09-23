@@ -31,6 +31,8 @@ export type BaseRateHorizon = {
   p_up?: number | null;
   excess?: number | null;
   n?: number;
+  /** False when p_up is near the all-market baseline (no clear hit-rate edge). */
+  hit_edge?: boolean | null;
 };
 
 export type BaseRateRow = {
@@ -50,6 +52,12 @@ export type BaseRateTable = {
   edge?: number | null;
   tilt?: string;
   tilt_note?: string;
+  /** False when matched buckets lack a clear win-vs-market edge. */
+  hit_rate_has_edge?: boolean | null;
+  columns?: {
+    p_up?: string;
+    excess?: string;
+  };
 };
 
 export type MarketSummary = {

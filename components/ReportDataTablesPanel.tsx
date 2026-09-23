@@ -392,11 +392,20 @@ function FlowTable({
   );
 }
 
-function formatWinRate(value?: number | null) {
+function formatHitRate(horizon?: {
+  p_up?: number | null;
+  hit_edge?: boolean | null;
+}) {
+  const value = horizon?.p_up;
   if (value == null) {
     return "—";
   }
-  return `${Math.round(value * 100)}%`;
+  const pct = `${Math.round(value * 100)}%`;
+  // hit_edge === false → near all-market baseline; mark like backend「≈」.
+  if (horizon?.hit_edge === false) {
+    return `${pct}≈`;
+  }
+  return pct;
 }
 
 function formatExcess(value?: number | null) {
@@ -407,11 +416,15 @@ function formatExcess(value?: number | null) {
   return `${prefix}${value.toFixed(1)}%`;
 }
 
+const BASE_RATE_TITLE_FALLBACK = "歷史 forward 對照（相對大盤超額）";
+
 function BaseRateDetails({ table }: { table: BaseRateTable }) {
+  const excessLabel = table.columns?.excess || "平均超額";
+  const hitLabel = table.columns?.p_up || "贏大盤占比";
   return (
     <details className="rounded-xl border border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/40">
       <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-zinc-900 marker:text-zinc-400 dark:text-zinc-100">
-        {table.title || "歷史命中率"}
+        {table.title || BASE_RATE_TITLE_FALLBACK}
         <span className="ml-2 text-xs font-normal text-zinc-500">
           （點擊展開）
         </span>
@@ -426,10 +439,10 @@ function BaseRateDetails({ table }: { table: BaseRateTable }) {
               <tr className="border-b border-zinc-200 text-left text-zinc-500 dark:border-zinc-700">
                 <th className="px-3 py-2 font-medium">維度</th>
                 <th className="px-3 py-2 font-medium">當前狀態</th>
-                <th className="px-3 py-2 font-medium">3日勝率</th>
-                <th className="px-3 py-2 font-medium">3日超額</th>
-                <th className="px-3 py-2 font-medium">5日勝率</th>
-                <th className="px-3 py-2 font-medium">5日超額</th>
+                <th className="px-3 py-2 font-medium">3日{excessLabel}</th>
+                <th className="px-3 py-2 font-medium">3日{hitLabel}</th>
+                <th className="px-3 py-2 font-medium">5日{excessLabel}</th>
+                <th className="px-3 py-2 font-medium">5日{hitLabel}</th>
                 <th className="px-3 py-2 font-medium">樣本(信心)</th>
               </tr>
             </thead>
@@ -441,10 +454,10 @@ function BaseRateDetails({ table }: { table: BaseRateTable }) {
                 >
                   <td className="px-3 py-2 whitespace-nowrap">{row.dimension}</td>
                   <td className="px-3 py-2">{row.state}</td>
-                  <td className="px-3 py-2">{formatWinRate(row.h3.p_up)}</td>
                   <td className="px-3 py-2">{formatExcess(row.h3.excess)}</td>
-                  <td className="px-3 py-2">{formatWinRate(row.h5.p_up)}</td>
+                  <td className="px-3 py-2">{formatHitRate(row.h3)}</td>
                   <td className="px-3 py-2">{formatExcess(row.h5.excess)}</td>
+                  <td className="px-3 py-2">{formatHitRate(row.h5)}</td>
                   <td className="px-3 py-2">
                     n={row.sample_n}（{row.confidence}）
                   </td>
@@ -453,6 +466,9 @@ function BaseRateDetails({ table }: { table: BaseRateTable }) {
             </tbody>
           </table>
         </div>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          「≈」＝贏大盤占比近全市場基準（無明顯邊緣），不可寫成勝率優勢。方向優先看平均超額。
+        </p>
         {table.edge != null && table.tilt ? (
           <p className="text-sm text-zinc-700 dark:text-zinc-300">
             <strong>綜合歷史傾向：</strong>
@@ -538,13 +554,13 @@ export function ReportDataTablesPanel({
       ) : (
         <details className="rounded-xl border border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/40">
           <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-zinc-900 marker:text-zinc-400 dark:text-zinc-100">
-            歷史命中率（同型態個股 forward 表現）
+            歷史 forward 對照（相對大盤超額）
             <span className="ml-2 text-xs font-normal text-zinc-500">
               （點擊展開）
             </span>
           </summary>
           <p className="px-4 pb-4 text-sm text-zinc-600 dark:text-zinc-400">
-            此報告尚無校準命中率。有離線校準檔並重新產報後，才會寫入這張表。
+            此報告尚無校準 forward 對照。有離線校準檔並重新產報後，才會寫入這張表。
           </p>
         </details>
       )}
