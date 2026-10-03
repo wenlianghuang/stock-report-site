@@ -411,6 +411,45 @@ export type ConceptCompareResult = {
   rows: ConceptCompareRow[];
   highlights: string[];
   sharedThemes: Array<{ id: string; label: string }>;
+  stance?: {
+    label: "weaker" | "stronger" | "mixed" | "unknown" | string;
+    base_weaker: boolean;
+    reasons: string[];
+  };
+};
+
+export type PeerGraphStep = {
+  node: string;
+  ok: boolean;
+  detail: string;
+};
+
+export type PeerGraphJob = {
+  id: string;
+  stockId: string;
+  peerId: string;
+  status: string;
+  tradeDate?: string | null;
+  error?: string | null;
+  notes: string[];
+  steps: PeerGraphStep[];
+  comparison?: {
+    label?: string;
+    base_weaker?: boolean;
+    reasons?: string[];
+    highlights?: string[];
+    tradeDate?: string | null;
+  } | null;
+  baseWeaker: boolean;
+  positionEntered: boolean;
+  positionSkippedReason?: string | null;
+  mdPath?: string | null;
+  positionMdPath?: string | null;
+  digestStatus: string;
+  digestSubject?: string | null;
+  digestBody?: string | null;
+  digestPath?: string | null;
+  interruptedBefore?: string | null;
 };
 
 export async function getConceptPeers(
@@ -515,6 +554,11 @@ export async function compareConceptStocks(
     rows: ConceptCompareRow[];
     highlights: string[];
     shared_themes?: Array<{ id: string; label: string }>;
+    stance?: {
+      label: string;
+      base_weaker: boolean;
+      reasons: string[];
+    };
   };
 
   const mapSide = (side: Record<string, unknown>): ConceptCompareSide => ({
@@ -553,7 +597,151 @@ export async function compareConceptStocks(
     rows: payload.rows ?? [],
     highlights: payload.highlights ?? [],
     sharedThemes: payload.shared_themes ?? [],
+    stance: payload.stance,
   };
+}
+
+function mapPeerGraphJob(job: {
+  id: string;
+  stock_id: string;
+  peer_id: string;
+  status: string;
+  trade_date?: string | null;
+  error?: string | null;
+  notes?: string[];
+  steps?: PeerGraphStep[];
+  comparison?: PeerGraphJob["comparison"];
+  base_weaker?: boolean;
+  position_entered?: boolean;
+  position_skipped_reason?: string | null;
+  md_path?: string | null;
+  position_md_path?: string | null;
+  digest_status?: string;
+  digest_subject?: string | null;
+  digest_body?: string | null;
+  digest_path?: string | null;
+  interrupted_before?: string | null;
+}): PeerGraphJob {
+  return {
+    id: job.id,
+    stockId: job.stock_id,
+    peerId: job.peer_id,
+    status: job.status,
+    tradeDate: job.trade_date,
+    error: job.error,
+    notes: job.notes ?? [],
+    steps: job.steps ?? [],
+    comparison: job.comparison,
+    baseWeaker: Boolean(job.base_weaker),
+    positionEntered: Boolean(job.position_entered),
+    positionSkippedReason: job.position_skipped_reason,
+    mdPath: job.md_path,
+    positionMdPath: job.position_md_path,
+    digestStatus: job.digest_status ?? "not_applicable",
+    digestSubject: job.digest_subject,
+    digestBody: job.digest_body,
+    digestPath: job.digest_path,
+    interruptedBefore: job.interrupted_before,
+  };
+}
+
+async function postPeerGraphSend(
+  jobId: string,
+  path: "send-claim" | "send-result",
+  body?: { ok: boolean; error?: string },
+): Promise<PeerGraphJob> {
+  const response = await fetch(
+    `${baseUrl()}/peer-graph/jobs/${encodeURIComponent(jobId)}/${path}`,
+    {
+      method: "POST",
+      headers: agentHeaders(
+        body ? { "Content-Type": "application/json" } : undefined,
+      ),
+      body: body ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      detail = data.detail ?? "";
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail || `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as { job: Parameters<typeof mapPeerGraphJob>[0] };
+  return mapPeerGraphJob(payload.job);
+}
+
+export function claimPeerGraphSend(jobId: string): Promise<PeerGraphJob> {
+  return postPeerGraphSend(jobId, "send-claim");
+}
+
+export function finishPeerGraphSend(
+  jobId: string,
+  ok: boolean,
+  error?: string,
+): Promise<PeerGraphJob> {
+  return postPeerGraphSend(jobId, "send-result", { ok, error });
+}
+
+export async function createPeerGraphJob(input: {
+  stockId: string;
+  peerId: string;
+  tradeDate?: string;
+  fetch?: boolean;
+  isHolding?: boolean;
+  shareCount?: number;
+  avgCost?: number;
+}): Promise<PeerGraphJob> {
+  const response = await fetch(`${baseUrl()}/peer-graph/jobs`, {
+    method: "POST",
+    headers: agentHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      stock_id: input.stockId,
+      peer_id: input.peerId,
+      trade_date: input.tradeDate,
+      fetch: input.fetch ?? false,
+      is_holding: Boolean(input.isHolding),
+      share_count: input.shareCount,
+      avg_cost: input.avgCost,
+      skip_pdf: true,
+    }),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      detail = data.detail ?? "";
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail || `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as { job: Parameters<typeof mapPeerGraphJob>[0] };
+  return mapPeerGraphJob(payload.job);
+}
+
+export async function getPeerGraphJob(jobId: string): Promise<PeerGraphJob> {
+  const response = await fetch(
+    `${baseUrl()}/peer-graph/jobs/${encodeURIComponent(jobId)}`,
+    { headers: agentHeaders(), cache: "no-store" },
+  );
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      detail = data.detail ?? "";
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail || `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as { job: Parameters<typeof mapPeerGraphJob>[0] };
+  return mapPeerGraphJob(payload.job);
 }
 
 export async function getStockChart(

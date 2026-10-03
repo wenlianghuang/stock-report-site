@@ -220,6 +220,9 @@ export default function ReportPage() {
           stockId={report!.stockId}
           stockName={report?.stockName}
           tradeDate={report?.tradeDate}
+          isHolding={report?.isHolding}
+          shareCount={report?.shareCount}
+          avgCost={report?.avgCost}
         />
       );
     }
