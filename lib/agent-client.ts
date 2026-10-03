@@ -343,6 +343,219 @@ export async function listPortfolioThemes(): Promise<
   return payload.themes ?? [];
 }
 
+export type ConceptPeer = {
+  stockId: string;
+  stockName: string;
+  assetClass?: string;
+  sector?: string;
+};
+
+export type ConceptPeerGroup = {
+  themeId: string;
+  label: string;
+  style?: string;
+  riskHint?: string;
+  peers: ConceptPeer[];
+};
+
+export type ConceptPeersResult = {
+  stockId: string;
+  stockName?: string;
+  inUniverse: boolean;
+  themes: Array<{ id: string; label: string; style?: string; riskHint?: string }>;
+  groups: ConceptPeerGroup[];
+};
+
+export type ConceptCompareSide = {
+  stockId?: string | null;
+  stockName?: string | null;
+  tradeDate?: string | null;
+  close?: number | null;
+  available: boolean;
+  today_change_pct?: number | null;
+  period_return_pct?: number | null;
+  foreign_net_lots?: number | null;
+  trust_net_lots?: number | null;
+  dealer_net_lots?: number | null;
+  major_net_lots?: number | null;
+  volume_today_lots?: number | null;
+  volume_ma_ratio?: number | null;
+  close_vs_ma10_pct?: number | null;
+  close_vs_ma20_pct?: number | null;
+  ma20_position?: string | null;
+  ma_stack?: string | null;
+  institutional_consensus?: string | null;
+  chip_regime?: string | null;
+  rs_today?: string | null;
+  rs_period?: string | null;
+  price_trend?: string | null;
+  rsi_14?: number | null;
+};
+
+export type ConceptCompareRow = {
+  key: string;
+  label: string;
+  kind: "pct" | "lots" | "ratio" | "number" | "label" | string;
+  base: string | number | null;
+  peer: string | number | null;
+  base_raw?: string | number | null;
+  peer_raw?: string | number | null;
+};
+
+export type ConceptCompareResult = {
+  tradeDate?: string | null;
+  baseId: string;
+  peerId: string;
+  base: ConceptCompareSide;
+  peer: ConceptCompareSide;
+  rows: ConceptCompareRow[];
+  highlights: string[];
+  sharedThemes: Array<{ id: string; label: string }>;
+};
+
+export async function getConceptPeers(
+  stockId: string,
+): Promise<ConceptPeersResult> {
+  const url = `${baseUrl()}/stocks/${encodeURIComponent(stockId)}/concept-peers`;
+  const response = await fetch(url, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      detail = data.detail ?? "";
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail || `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as {
+    stock_id: string;
+    stock_name?: string | null;
+    in_universe: boolean;
+    themes?: Array<{
+      id: string;
+      label: string;
+      style?: string;
+      risk_hint?: string;
+    }>;
+    groups?: Array<{
+      theme_id: string;
+      label: string;
+      style?: string;
+      risk_hint?: string;
+      peers: Array<{
+        stock_id: string;
+        stock_name: string;
+        asset_class?: string;
+        sector?: string;
+      }>;
+    }>;
+  };
+  return {
+    stockId: payload.stock_id,
+    stockName: payload.stock_name ?? undefined,
+    inUniverse: Boolean(payload.in_universe),
+    themes: (payload.themes ?? []).map((t) => ({
+      id: t.id,
+      label: t.label,
+      style: t.style,
+      riskHint: t.risk_hint,
+    })),
+    groups: (payload.groups ?? []).map((g) => ({
+      themeId: g.theme_id,
+      label: g.label,
+      style: g.style,
+      riskHint: g.risk_hint,
+      peers: (g.peers ?? []).map((p) => ({
+        stockId: p.stock_id,
+        stockName: p.stock_name,
+        assetClass: p.asset_class,
+        sector: p.sector,
+      })),
+    })),
+  };
+}
+
+export async function compareConceptStocks(
+  stockId: string,
+  peerId: string,
+  tradeDate?: string,
+): Promise<ConceptCompareResult> {
+  const params = new URLSearchParams();
+  if (tradeDate) {
+    params.set("date", tradeDate);
+  }
+  const query = params.toString();
+  const url = `${baseUrl()}/stocks/${encodeURIComponent(stockId)}/compare/${encodeURIComponent(peerId)}${
+    query ? `?${query}` : ""
+  }`;
+  const response = await fetch(url, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      detail = data.detail ?? "";
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail || `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as {
+    trade_date?: string | null;
+    base_id: string;
+    peer_id: string;
+    base: Record<string, unknown>;
+    peer: Record<string, unknown>;
+    rows: ConceptCompareRow[];
+    highlights: string[];
+    shared_themes?: Array<{ id: string; label: string }>;
+  };
+
+  const mapSide = (side: Record<string, unknown>): ConceptCompareSide => ({
+    stockId: (side.stock_id as string | null | undefined) ?? null,
+    stockName: (side.stock_name as string | null | undefined) ?? null,
+    tradeDate: (side.trade_date as string | null | undefined) ?? null,
+    close: (side.close as number | null | undefined) ?? null,
+    available: Boolean(side.available),
+    today_change_pct: side.today_change_pct as number | null | undefined,
+    period_return_pct: side.period_return_pct as number | null | undefined,
+    foreign_net_lots: side.foreign_net_lots as number | null | undefined,
+    trust_net_lots: side.trust_net_lots as number | null | undefined,
+    dealer_net_lots: side.dealer_net_lots as number | null | undefined,
+    major_net_lots: side.major_net_lots as number | null | undefined,
+    volume_today_lots: side.volume_today_lots as number | null | undefined,
+    volume_ma_ratio: side.volume_ma_ratio as number | null | undefined,
+    close_vs_ma10_pct: side.close_vs_ma10_pct as number | null | undefined,
+    close_vs_ma20_pct: side.close_vs_ma20_pct as number | null | undefined,
+    ma20_position: side.ma20_position as string | null | undefined,
+    ma_stack: side.ma_stack as string | null | undefined,
+    institutional_consensus:
+      side.institutional_consensus as string | null | undefined,
+    chip_regime: side.chip_regime as string | null | undefined,
+    rs_today: side.rs_today as string | null | undefined,
+    rs_period: side.rs_period as string | null | undefined,
+    price_trend: side.price_trend as string | null | undefined,
+    rsi_14: side.rsi_14 as number | null | undefined,
+  });
+
+  return {
+    tradeDate: payload.trade_date,
+    baseId: payload.base_id,
+    peerId: payload.peer_id,
+    base: mapSide(payload.base ?? {}),
+    peer: mapSide(payload.peer ?? {}),
+    rows: payload.rows ?? [],
+    highlights: payload.highlights ?? [],
+    sharedThemes: payload.shared_themes ?? [],
+  };
+}
+
 export async function getStockChart(
   stockId: string,
   tradeDate?: string,

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ConceptPeersPanel } from "@/components/ConceptPeersPanel";
 import { MarkdownReport } from "@/components/MarkdownReport";
 import { ReportChartsPanel } from "@/components/ReportChartsPanel";
 import { ReportDataTablesPanel } from "@/components/ReportDataTablesPanel";
@@ -14,7 +15,13 @@ import {
 import type { ReportRecord, ReportStatus } from "@/lib/types";
 import { formatMarginQuantity } from "@/lib/holding-legs";
 
-type ReportTab = "summary" | "data" | "chart" | "market" | "position";
+type ReportTab =
+  | "summary"
+  | "data"
+  | "chart"
+  | "concepts"
+  | "market"
+  | "position";
 
 type ReportPayload = {
   report: ReportRecord;
@@ -207,6 +214,16 @@ export default function ReportPage() {
       );
     }
 
+    if (activeTab === "concepts") {
+      return (
+        <ConceptPeersPanel
+          stockId={report!.stockId}
+          stockName={report?.stockName}
+          tradeDate={report?.tradeDate}
+        />
+      );
+    }
+
     if (activeTab === "position") {
       if (!positionMarkdown) {
         return (
@@ -343,6 +360,13 @@ export default function ReportPage() {
               className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tabClass(activeTab === "chart")}`}
             >
               圖表
+            </button>
+            <button
+              type="button"
+              onClick={() => selectTab("concepts")}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tabClass(activeTab === "concepts")}`}
+            >
+              概念股
             </button>
             <button
               type="button"
