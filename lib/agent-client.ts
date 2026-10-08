@@ -1138,3 +1138,55 @@ export async function chatMarketDailyStream(
   });
   return response;
 }
+
+export type StockReportChatHistoryItem = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type StockReportChatStreamInput = {
+  stockId: string;
+  message: string;
+  tradeDate?: string | null;
+  facts?: Record<string, unknown> | null;
+  summary?: Record<string, unknown> | null;
+  markdown?: string | null;
+  positionFacts?: Record<string, unknown> | null;
+  positionMarkdown?: string | null;
+  holdings?: Array<Record<string, unknown>>;
+  history?: StockReportChatHistoryItem[];
+  useLlm?: boolean;
+};
+
+export async function chatStockReportStream(
+  input: StockReportChatStreamInput,
+): Promise<Response> {
+  const body: Record<string, unknown> = {
+    message: input.message,
+    stock_id: input.stockId,
+    use_llm: input.useLlm !== false,
+  };
+  if (input.tradeDate) body.trade_date = input.tradeDate;
+  if (input.facts) body.facts = input.facts;
+  if (input.summary) body.summary = input.summary;
+  if (input.markdown) body.markdown = input.markdown;
+  if (input.positionFacts) body.position_facts = input.positionFacts;
+  if (input.positionMarkdown) body.position_markdown = input.positionMarkdown;
+  if (input.holdings?.length) body.holdings = input.holdings;
+  if (input.history?.length) body.history = input.history;
+
+  const response = await fetch(
+    `${baseUrl()}/stock/${encodeURIComponent(input.stockId)}/chat/stream`,
+    {
+      method: "POST",
+      headers: agentHeaders({
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      }),
+      body: JSON.stringify(body),
+      cache: "no-store",
+    },
+  );
+  return response;
+}
+

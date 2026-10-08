@@ -8,6 +8,7 @@ import { MarkdownReport } from "@/components/MarkdownReport";
 import { ReportChartsPanel } from "@/components/ReportChartsPanel";
 import { ReportDataTablesPanel } from "@/components/ReportDataTablesPanel";
 import { ReportSummaryPanel } from "@/components/ReportSummaryPanel";
+import { StockReportChat } from "@/components/StockReportChat";
 import {
   ReportStatusBadge,
   statusHint,
@@ -21,7 +22,8 @@ type ReportTab =
   | "chart"
   | "concepts"
   | "market"
-  | "position";
+  | "position"
+  | "chat";
 
 type ReportPayload = {
   report: ReportRecord;
@@ -246,6 +248,18 @@ export default function ReportPage() {
       return <MarkdownReport markdown={positionMarkdown} />;
     }
 
+    if (activeTab === "chat") {
+      return (
+        <StockReportChat
+          reportId={report!.id}
+          stockId={report!.stockId}
+          stockName={report?.stockName}
+          tradeDate={report?.tradeDate}
+          disabled={status !== "done"}
+        />
+      );
+    }
+
     if (!marketMarkdown) {
       return (
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -387,6 +401,14 @@ export default function ReportPage() {
                 部位報告
               </button>
             ) : null}
+            <button
+              type="button"
+              onClick={() => selectTab("chat")}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium flex items-center gap-1.5 ${tabClass(activeTab === "chat")}`}
+            >
+              <span>💬</span>
+              <span>報告提問</span>
+            </button>
           </div>
           {renderTabContent()}
         </div>
