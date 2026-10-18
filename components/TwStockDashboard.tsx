@@ -224,6 +224,7 @@ export function TwStockDashboard() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [analyzingHoldings, setAnalyzingHoldings] = useState(false);
   const [sendingDate, setSendingDate] = useState<string | null>(null);
   const [sentNotice, setSentNotice] = useState<string>("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -589,6 +590,20 @@ export function TwStockDashboard() {
     });
   }
 
+  function revealCreatedReports(created: ReportRecord[]) {
+    setReports((prev) => {
+      const existing = new Set(created.map((item) => item.id));
+      return [...created, ...prev.filter((item) => !existing.has(item.id))];
+    });
+    const dateKey = created[0]?.tradeDate || tradeDate || reportDateKey(created[0]!);
+    const [year, month, day] = dateKey.split("-");
+    if (year && month && day) {
+      setOpenYears((prev) => ({ ...prev, [year]: true }));
+      setOpenMonths((prev) => ({ ...prev, [`${year}-${month}`]: true }));
+      setOpenDays((prev) => ({ ...prev, [dateKey]: true }));
+    }
+  }
+
   async function createReportFromFields(fields: {
     stocks: Array<{ stockId: string; holding: SlotHolding }>;
     isHolding: boolean;
@@ -662,20 +677,7 @@ export function TwStockDashboard() {
       }
 
       if (created.length > 0) {
-        setReports((prev) => {
-          const existing = new Set(created.map((r) => r.id));
-          return [
-            ...created,
-            ...prev.filter((r) => !existing.has(r.id)),
-          ];
-        });
-        const dateKey = created[0]?.tradeDate || tradeDate || reportDateKey(created[0]!);
-        const [year, month, day] = dateKey.split("-");
-        if (year && month && day) {
-          setOpenYears((prev) => ({ ...prev, [year]: true }));
-          setOpenMonths((prev) => ({ ...prev, [`${year}-${month}`]: true }));
-          setOpenDays((prev) => ({ ...prev, [dateKey]: true }));
-        }
+        revealCreatedReports(created);
         if (jobs.length === 1 && created.length === 1) {
           setSentNotice(
             `已開始分析 ${created[0]!.stockId}，可在下方列表查看進度，或開啟報告頁。`,
@@ -707,6 +709,46 @@ export function TwStockDashboard() {
       })),
       isHolding,
     });
+  }
+
+  async function analyzeAllHoldings() {
+    setError("");
+    setSentNotice("");
+    setAnalyzingHoldings(true);
+    try {
+      const response = await fetch("/api/reports/from-holdings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(tradeDate ? { tradeDate } : {}),
+      });
+      const payload = (await response.json()) as {
+        error?: string;
+        reports?: ReportRecord[];
+        failures?: Array<{ stockId: string; error: string }>;
+        truncated?: boolean;
+      };
+      const created = payload.reports ?? [];
+      if (created.length > 0) {
+        revealCreatedReports(created);
+        const ids = created.map((report) => report.stockId).join("、");
+        const capNote = payload.truncated ? "（只先送出最近更新的 20 檔）" : "";
+        setSentNotice(
+          `已開始分析持股 ${ids}${capNote}。進度在下方列表；完成後可用「寄出彙整 Email」。`,
+        );
+      }
+      if (!response.ok && created.length === 0) {
+        setError(payload.error ?? "無法開始分析持股");
+        return;
+      }
+      const failed = payload.failures ?? [];
+      if (failed.length > 0) {
+        setError(failed.map((item) => `${item.stockId}: ${item.error}`).join("；"));
+      }
+    } catch {
+      setError("網路錯誤，請稍後再試");
+    } finally {
+      setAnalyzingHoldings(false);
+    }
   }
 
   async function onDelete(report: ReportRecord) {
@@ -968,15 +1010,23 @@ export function TwStockDashboard() {
               />
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || analyzingHoldings}
                 className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
               >
                 {loading ? "建立中…" : "開始分析"}
               </button>
+              <button
+                type="button"
+                disabled={loading || analyzingHoldings}
+                onClick={() => void analyzeAllHoldings()}
+                className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              >
+                {analyzingHoldings ? "送出持股中…" : "分析全部持股"}
+              </button>
             </div>
           </div>
           <p className="text-xs text-zinc-500">
-            交易日期已依證交所開休市日期表自動帶入，並以加權指數成交確認臨時休市（21:30 前用前一交易日、之後用當日；休市日順延至最近交易日），可自行調整；清空則由系統使用最近交易日。有持股時請為每一檔至少填現股（股）或融資（張，1 張＝1000 股）一組；可同時填兩組，系統會分開分析並給綜合結論。已儲存的持股會依股號自動帶入。多檔分析請用上方「分析檔數」決定要展開幾個輸入框（1～{MAX_STOCK_SLOTS} 檔），含融資也可一次送出並行。
+            交易日期已依證交所開休市日期表自動帶入，並以加權指數成交確認臨時休市（21:30 前用前一交易日、之後用當日；休市日順延至最近交易日），可自行調整；清空則由系統使用最近交易日。有持股時請為每一檔至少填現股（股）或融資（張，1 張＝1000 股）一組；可同時填兩組，系統會分開分析並給綜合結論。已儲存的持股會依股號自動帶入。「分析全部持股」會把已存、且有均價與股數的標的各開一份報告（含部位），一次最多 20 檔。多檔分析請用上方「分析檔數」決定要展開幾個輸入框（1～{MAX_STOCK_SLOTS} 檔），含融資也可一次送出並行。
           </p>
         </form>
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
