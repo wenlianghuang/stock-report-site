@@ -452,6 +452,224 @@ export type PeerGraphJob = {
   interruptedBefore?: string | null;
 };
 
+export type ConceptGroupMember = {
+  stockId: string;
+  stockName: string;
+  sector: string;
+  themeIds: string[];
+};
+
+export type ConceptGroup = {
+  themeId: string;
+  label: string;
+  style?: string;
+  riskHint?: string;
+  members: ConceptGroupMember[];
+};
+
+export type ConceptBoardRow = {
+  stockId: string;
+  stockName: string;
+  sector: string;
+  themeIds: string[];
+  available: boolean;
+  aligned: boolean;
+  tradeDate?: string | null;
+  close?: number | null;
+  todayChangePct?: number | null;
+  periodReturnPct?: number | null;
+  foreignNetLots?: number | null;
+  chipRegimeLabel: string;
+  rsTodayLabel: string;
+};
+
+export type ConceptBoard = {
+  themeId?: string | null;
+  tradeDate?: string | null;
+  rows: ConceptBoardRow[];
+  warnings: string[];
+  missing: string[];
+};
+
+export type ConceptGroupBrief = {
+  ok: boolean;
+  title: string;
+  tradeDate: string | null;
+  paragraphs: string[];
+  sections?: Array<{
+    id: string;
+    title: string;
+    paragraphs: string[];
+  }>;
+  missing: string[];
+  rows: Array<{
+    stockId: string;
+    stockName: string;
+    held: boolean;
+    weekReturnPct: number | null;
+    weekForeignNetLots: number | null;
+    weekTrustNetLots: number | null;
+    weekDealerNetLots: number | null;
+  }>;
+};
+
+async function readAgentError(response: Response, fallback: string): Promise<string> {
+  try {
+    const data = (await response.json()) as { detail?: string };
+    return data.detail || fallback;
+  } catch {
+    const text = await response.text();
+    return text || fallback;
+  }
+}
+
+export async function getConceptGroups(): Promise<ConceptGroup[]> {
+  const response = await fetch(`${baseUrl()}/concept-groups`, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(await readAgentError(response, "無法取得概念族群"));
+  }
+  const payload = (await response.json()) as {
+    themes?: Array<{
+      theme_id: string;
+      label: string;
+      style?: string;
+      risk_hint?: string;
+      members?: Array<{
+        stock_id: string;
+        stock_name: string;
+        sector?: string;
+        theme_ids?: string[];
+      }>;
+    }>;
+  };
+  return (payload.themes ?? []).map((theme) => ({
+    themeId: theme.theme_id,
+    label: theme.label,
+    style: theme.style,
+    riskHint: theme.risk_hint,
+    members: (theme.members ?? []).map((member) => ({
+      stockId: member.stock_id,
+      stockName: member.stock_name,
+      sector: member.sector ?? "",
+      themeIds: member.theme_ids ?? [],
+    })),
+  }));
+}
+
+export async function getConceptBoard(input: {
+  themeId?: string;
+  stockIds?: string[];
+  tradeDate?: string;
+  fetchMissing?: boolean;
+}): Promise<ConceptBoard> {
+  const params = new URLSearchParams();
+  if (input.themeId) {
+    params.set("theme", input.themeId);
+  }
+  if (input.stockIds && input.stockIds.length > 0) {
+    params.set("ids", input.stockIds.join(","));
+  }
+  if (input.tradeDate) {
+    params.set("date", input.tradeDate);
+  }
+  if (input.fetchMissing) {
+    params.set("fetch", "true");
+  }
+  const query = params.toString();
+  const response = await fetch(`${baseUrl()}/concept-board${query ? `?${query}` : ""}`, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(await readAgentError(response, "無法取得族群狀態"));
+  }
+  const payload = (await response.json()) as {
+    theme_id?: string | null;
+    trade_date?: string | null;
+    warnings?: string[];
+    missing?: string[];
+    rows?: Array<Record<string, unknown>>;
+  };
+  return {
+    themeId: payload.theme_id,
+    tradeDate: payload.trade_date,
+    warnings: payload.warnings ?? [],
+    missing: payload.missing ?? [],
+    rows: (payload.rows ?? []).map((row) => ({
+      stockId: String(row.stock_id ?? ""),
+      stockName: String(row.stock_name ?? row.stock_id ?? ""),
+      sector: String(row.sector ?? ""),
+      themeIds: Array.isArray(row.theme_ids) ? (row.theme_ids as string[]) : [],
+      available: Boolean(row.available),
+      aligned: Boolean(row.aligned),
+      tradeDate: (row.trade_date as string | null | undefined) ?? null,
+      close: (row.close as number | null | undefined) ?? null,
+      todayChangePct: (row.today_change_pct as number | null | undefined) ?? null,
+      periodReturnPct: (row.period_return_pct as number | null | undefined) ?? null,
+      foreignNetLots: (row.foreign_net_lots as number | null | undefined) ?? null,
+      chipRegimeLabel: String(row.chip_regime_label ?? "—"),
+      rsTodayLabel: String(row.rs_today_label ?? "—"),
+    })),
+  };
+}
+
+export async function getConceptGroupBrief(input: {
+  stockIds: string[];
+  heldIds?: string[];
+  tradeDate?: string;
+}): Promise<ConceptGroupBrief> {
+  const params = new URLSearchParams();
+  params.set("ids", input.stockIds.join(","));
+  if (input.heldIds && input.heldIds.length > 0) {
+    params.set("held", input.heldIds.join(","));
+  }
+  if (input.tradeDate) {
+    params.set("date", input.tradeDate);
+  }
+  const response = await fetch(`${baseUrl()}/concept-board/brief?${params.toString()}`, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(await readAgentError(response, "無法產生這一小群對照"));
+  }
+  const payload = (await response.json()) as {
+    ok?: boolean;
+    title?: string;
+    trade_date?: string | null;
+    paragraphs?: string[];
+    sections?: Array<{ id?: string; title?: string; paragraphs?: string[] }>;
+    missing?: string[];
+    rows?: Array<Record<string, unknown>>;
+  };
+  return {
+    ok: Boolean(payload.ok),
+    title: payload.title || "近五個交易日",
+    tradeDate: payload.trade_date ?? null,
+    paragraphs: payload.paragraphs ?? [],
+    sections: (payload.sections ?? [])
+      .filter((section) => section.title && section.paragraphs?.length)
+      .map((section) => ({
+        id: section.id || section.title || "section",
+        title: section.title || "",
+        paragraphs: section.paragraphs ?? [],
+      })),
+    missing: payload.missing ?? [],
+    rows: (payload.rows ?? []).map((row) => ({
+      stockId: String(row.stock_id ?? ""),
+      stockName: String(row.stock_name ?? row.stock_id ?? ""),
+      held: Boolean(row.held),
+      weekReturnPct: (row.week_return_pct as number | null | undefined) ?? null,
+      weekForeignNetLots: (row.week_foreign_net_lots as number | null | undefined) ?? null,
+      weekTrustNetLots: (row.week_trust_net_lots as number | null | undefined) ?? null,
+      weekDealerNetLots: (row.week_dealer_net_lots as number | null | undefined) ?? null,
+    })),
+  };
+}
+
 export async function getConceptPeers(
   stockId: string,
 ): Promise<ConceptPeersResult> {

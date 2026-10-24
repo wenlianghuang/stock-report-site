@@ -7,10 +7,11 @@ import { TwStockDashboard } from "@/components/TwStockDashboard";
 import { TwPortfolioDashboard } from "@/components/TwPortfolioDashboard";
 import { TwMarketWeeklyDashboard } from "@/components/TwMarketWeeklyDashboard";
 import { TwMarketDailyDashboard } from "@/components/TwMarketDailyDashboard";
+import { TwConceptBoard } from "@/components/TwConceptBoard";
 import { UsStockDashboard } from "@/components/UsStockDashboard";
 
 type MarketTab = "tw" | "us";
-type TwView = "chip" | "portfolio" | "weekly" | "daily";
+type TwView = "chip" | "portfolio" | "groups" | "weekly" | "daily";
 
 function tabClass(active: boolean): string {
   return active
@@ -20,6 +21,7 @@ function tabClass(active: boolean): string {
 
 function parseTwView(raw: string | null): TwView {
   if (raw === "portfolio") return "portfolio";
+  if (raw === "groups") return "groups";
   if (raw === "weekly") return "weekly";
   if (raw === "daily") return "daily";
   return "chip";
@@ -39,6 +41,10 @@ export function HomeShell() {
   function selectTwView(next: TwView) {
     if (next === "portfolio") {
       router.replace("/?view=portfolio");
+      return;
+    }
+    if (next === "groups") {
+      router.replace("/?view=groups");
       return;
     }
     if (next === "weekly") {
@@ -67,7 +73,10 @@ export function HomeShell() {
 
   const wide =
     market === "tw" &&
-    (twView === "portfolio" || twView === "weekly" || twView === "daily");
+    (twView === "portfolio" ||
+      twView === "groups" ||
+      twView === "weekly" ||
+      twView === "daily");
 
   return (
     <div className="min-h-full bg-zinc-100 dark:bg-zinc-950">
@@ -132,6 +141,13 @@ export function HomeShell() {
               </button>
               <button
                 type="button"
+                onClick={() => selectTwView("groups")}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(twView === "groups")}`}
+              >
+                族群比較
+              </button>
+              <button
+                type="button"
                 onClick={() => selectTwView("weekly")}
                 className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(twView === "weekly")}`}
               >
@@ -156,6 +172,8 @@ export function HomeShell() {
           <UsStockDashboard />
         ) : twView === "portfolio" ? (
           <TwPortfolioDashboard />
+        ) : twView === "groups" ? (
+          <TwConceptBoard />
         ) : twView === "weekly" ? (
           <TwMarketWeeklyDashboard />
         ) : twView === "daily" ? (
