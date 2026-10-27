@@ -616,6 +616,104 @@ export async function getConceptBoard(input: {
   };
 }
 
+export type TriageFlag = {
+  code: string;
+  label: string;
+  weight: number;
+};
+
+export type TriageRow = {
+  stockId: string;
+  stockName: string;
+  held: boolean;
+  hasCsv: boolean;
+  hasBaseline: boolean;
+  prevTradeDate: string | null;
+  chipRegime: string;
+  prevChipRegime: string | null;
+  flags: TriageFlag[];
+  score: number;
+  picked: boolean;
+  summary: string;
+};
+
+export type TriageResult = {
+  tradeDate: string | null;
+  topK: number;
+  rows: TriageRow[];
+  picks: string[];
+  skipped: string[];
+  missing: string[];
+  notes: string[];
+};
+
+export async function getTriage(input: {
+  stockIds: string[];
+  heldIds?: string[];
+  tradeDate?: string;
+  topK?: number;
+  fetchMissing?: boolean;
+}): Promise<TriageResult> {
+  const params = new URLSearchParams();
+  params.set("ids", input.stockIds.join(","));
+  if (input.heldIds && input.heldIds.length > 0) {
+    params.set("held", input.heldIds.join(","));
+  }
+  if (input.tradeDate) {
+    params.set("date", input.tradeDate);
+  }
+  if (input.topK !== undefined) {
+    params.set("top_k", String(input.topK));
+  }
+  if (input.fetchMissing) {
+    params.set("fetch", "true");
+  }
+  const response = await fetch(`${baseUrl()}/triage?${params.toString()}`, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(await readAgentError(response, "無法分流"));
+  }
+  const payload = (await response.json()) as {
+    trade_date?: string | null;
+    top_k?: number;
+    rows?: Array<Record<string, unknown>>;
+    picks?: string[];
+    skipped?: string[];
+    missing?: string[];
+    notes?: string[];
+  };
+  return {
+    tradeDate: payload.trade_date ?? null,
+    topK: Number(payload.top_k ?? 0),
+    picks: payload.picks ?? [],
+    skipped: payload.skipped ?? [],
+    missing: payload.missing ?? [],
+    notes: payload.notes ?? [],
+    rows: (payload.rows ?? []).map((row) => ({
+      stockId: String(row.stock_id ?? ""),
+      stockName: String(row.stock_name ?? ""),
+      held: Boolean(row.held),
+      hasCsv: Boolean(row.has_csv),
+      hasBaseline: Boolean(row.has_baseline),
+      prevTradeDate: (row.prev_trade_date as string | null | undefined) ?? null,
+      chipRegime: String(row.chip_regime ?? "unknown"),
+      prevChipRegime: (row.prev_chip_regime as string | null | undefined) ?? null,
+      flags: Array.isArray(row.flags)
+        ? (row.flags as Array<Record<string, unknown>>).map((flag) => ({
+            code: String(flag.code ?? ""),
+            label: String(flag.label ?? ""),
+            weight: Number(flag.weight ?? 0),
+          }))
+        : [],
+      score: Number(row.score ?? 0),
+      picked: Boolean(row.picked),
+      summary: String(row.summary ?? ""),
+    })),
+  };
+}
+
 export async function getConceptGroupBrief(input: {
   stockIds: string[];
   heldIds?: string[];

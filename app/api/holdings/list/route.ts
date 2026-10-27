@@ -14,6 +14,7 @@ export async function GET() {
       stockId: holding.stockId,
       shareCount: holding.shareCount,
       avgCost: holding.avgCost,
+      usesMargin: holding.usesMargin,
     })),
   });
 }

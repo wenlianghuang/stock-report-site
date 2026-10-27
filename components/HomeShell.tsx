@@ -8,10 +8,11 @@ import { TwPortfolioDashboard } from "@/components/TwPortfolioDashboard";
 import { TwMarketWeeklyDashboard } from "@/components/TwMarketWeeklyDashboard";
 import { TwMarketDailyDashboard } from "@/components/TwMarketDailyDashboard";
 import { TwConceptBoard } from "@/components/TwConceptBoard";
+import { TwTriageBoard } from "@/components/TwTriageBoard";
 import { UsStockDashboard } from "@/components/UsStockDashboard";
 
 type MarketTab = "tw" | "us";
-type TwView = "chip" | "portfolio" | "groups" | "weekly" | "daily";
+type TwView = "chip" | "triage" | "portfolio" | "groups" | "weekly" | "daily";
 
 function tabClass(active: boolean): string {
   return active
@@ -20,6 +21,7 @@ function tabClass(active: boolean): string {
 }
 
 function parseTwView(raw: string | null): TwView {
+  if (raw === "triage") return "triage";
   if (raw === "portfolio") return "portfolio";
   if (raw === "groups") return "groups";
   if (raw === "weekly") return "weekly";
@@ -39,6 +41,10 @@ export function HomeShell() {
   }
 
   function selectTwView(next: TwView) {
+    if (next === "triage") {
+      router.replace("/?view=triage");
+      return;
+    }
     if (next === "portfolio") {
       router.replace("/?view=portfolio");
       return;
@@ -73,7 +79,8 @@ export function HomeShell() {
 
   const wide =
     market === "tw" &&
-    (twView === "portfolio" ||
+    (twView === "triage" ||
+      twView === "portfolio" ||
       twView === "groups" ||
       twView === "weekly" ||
       twView === "daily");
@@ -134,6 +141,13 @@ export function HomeShell() {
               </button>
               <button
                 type="button"
+                onClick={() => selectTwView("triage")}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(twView === "triage")}`}
+              >
+                今日分流
+              </button>
+              <button
+                type="button"
                 onClick={() => selectTwView("portfolio")}
                 className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(twView === "portfolio")}`}
               >
@@ -170,6 +184,8 @@ export function HomeShell() {
       >
         {market === "us" ? (
           <UsStockDashboard />
+        ) : twView === "triage" ? (
+          <TwTriageBoard />
         ) : twView === "portfolio" ? (
           <TwPortfolioDashboard />
         ) : twView === "groups" ? (
