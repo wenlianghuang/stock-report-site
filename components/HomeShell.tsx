@@ -10,9 +10,10 @@ import { TwMarketDailyDashboard } from "@/components/TwMarketDailyDashboard";
 import { TwConceptBoard } from "@/components/TwConceptBoard";
 import { TwTriageBoard } from "@/components/TwTriageBoard";
 import { UsStockDashboard } from "@/components/UsStockDashboard";
+import { PaperTradingDashboard } from "@/components/PaperTradingDashboard";
 
 type MarketTab = "tw" | "us";
-type TwView = "chip" | "triage" | "portfolio" | "groups" | "weekly" | "daily";
+type TwView = "chip" | "triage" | "portfolio" | "groups" | "weekly" | "daily" | "paper";
 
 function tabClass(active: boolean): string {
   return active
@@ -26,6 +27,7 @@ function parseTwView(raw: string | null): TwView {
   if (raw === "groups") return "groups";
   if (raw === "weekly") return "weekly";
   if (raw === "daily") return "daily";
+  if (raw === "paper") return "paper";
   return "chip";
 }
 
@@ -61,6 +63,10 @@ export function HomeShell() {
       router.replace("/?view=daily");
       return;
     }
+    if (next === "paper") {
+      router.replace("/?view=paper");
+      return;
+    }
     router.replace("/");
   }
 
@@ -83,7 +89,8 @@ export function HomeShell() {
       twView === "portfolio" ||
       twView === "groups" ||
       twView === "weekly" ||
-      twView === "daily");
+      twView === "daily" ||
+      twView === "paper");
 
   return (
     <div className="min-h-full bg-zinc-100 dark:bg-zinc-950">
@@ -174,6 +181,13 @@ export function HomeShell() {
               >
                 開盤前日報
               </button>
+              <button
+                type="button"
+                onClick={() => selectTwView("paper")}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(twView === "paper")}`}
+              >
+                模擬交易
+              </button>
             </nav>
           ) : null}
         </div>
@@ -194,6 +208,8 @@ export function HomeShell() {
           <TwMarketWeeklyDashboard />
         ) : twView === "daily" ? (
           <TwMarketDailyDashboard />
+        ) : twView === "paper" ? (
+          <PaperTradingDashboard />
         ) : (
           <TwStockDashboard />
         )}

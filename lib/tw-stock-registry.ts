@@ -1,8 +1,11 @@
 import { toTraditionalChinese } from "@/lib/zh-convert";
 import { bestWindowScore, scoreNameSimilarity, MIN_AUTO_FILL_SCORE } from "@/lib/stock-name-fuzzy";
 
+type ListedMarket = "twse" | "tpex";
+
 type RegistryData = {
   idToName: Map<string, string>;
+  idToMarket: Map<string, ListedMarket>;
   sortedNameToId: Array<[name: string, stockId: string]>;
 };
 
@@ -124,19 +127,25 @@ function addNameVariant(nameToId: Map<string, string>, name: string, stockId: st
 
 function createSeedData(): RegistryData {
   const idToName = new Map<string, string>();
+  const idToMarket = new Map<string, ListedMarket>();
   const nameToId = new Map<string, string>();
   for (const [name, stockId] of Object.entries(SEED_NAME_TO_CODE)) {
     addNameVariant(nameToId, name, stockId);
     if (!idToName.has(stockId)) idToName.set(stockId, name);
+    if (!idToMarket.has(stockId)) idToMarket.set(stockId, "twse");
   }
-  return freezeRegistry(idToName, nameToId);
+  return freezeRegistry(idToName, idToMarket, nameToId);
 }
 
-function freezeRegistry(idToName: Map<string, string>, nameToId: Map<string, string>): RegistryData {
+function freezeRegistry(
+  idToName: Map<string, string>,
+  idToMarket: Map<string, ListedMarket>,
+  nameToId: Map<string, string>,
+): RegistryData {
   const sortedNameToId = Array.from(nameToId.entries()).sort(
     ([a], [b]) => b.length - a.length,
   );
-  return { idToName, sortedNameToId };
+  return { idToName, idToMarket, sortedNameToId };
 }
 
 async function fetchJson(url: string): Promise<Array<Record<string, unknown>>> {
@@ -151,7 +160,9 @@ async function fetchJson(url: string): Promise<Array<Record<string, unknown>>> {
 function addRows(
   rows: Array<Record<string, unknown>>,
   idToName: Map<string, string>,
+  idToMarket: Map<string, ListedMarket>,
   nameToId: Map<string, string>,
+  market: ListedMarket,
 ) {
   for (const row of rows) {
     const stockIdRaw = String(row["公司代號"] ?? row["SecuritiesCompanyCode"] ?? "").trim();
@@ -164,6 +175,9 @@ function addRows(
     if (!idToName.has(stockIdRaw)) {
       idToName.set(stockIdRaw, normalizeName(baseName));
     }
+    if (!idToMarket.has(stockIdRaw)) {
+      idToMarket.set(stockIdRaw, market);
+    }
 
     addNameVariant(nameToId, shortName, stockIdRaw);
     addNameVariant(nameToId, fullName, stockIdRaw);
@@ -173,10 +187,12 @@ function addRows(
 
 async function buildRegistryData(): Promise<RegistryData> {
   const idToName = new Map<string, string>();
+  const idToMarket = new Map<string, ListedMarket>();
   const nameToId = new Map<string, string>();
 
   for (const [name, stockId] of Object.entries(SEED_NAME_TO_CODE)) {
     if (!idToName.has(stockId)) idToName.set(stockId, normalizeName(name));
+    if (!idToMarket.has(stockId)) idToMarket.set(stockId, "twse");
     addNameVariant(nameToId, name, stockId);
   }
 
@@ -185,9 +201,9 @@ async function buildRegistryData(): Promise<RegistryData> {
     fetchJson(TPEX_OTC_URL),
   ]);
 
-  addRows(listedRows, idToName, nameToId);
-  addRows(otcRows, idToName, nameToId);
-  return freezeRegistry(idToName, nameToId);
+  addRows(listedRows, idToName, idToMarket, nameToId, "twse");
+  addRows(otcRows, idToName, idToMarket, nameToId, "tpex");
+  return freezeRegistry(idToName, idToMarket, nameToId);
 }
 
 async function getRegistry(): Promise<RegistryData> {
@@ -209,6 +225,14 @@ async function getRegistry(): Promise<RegistryData> {
     }
   })();
   return inflight;
+}
+
+/** 上市／上櫃公司名冊裡的普通股。ETF 與權證不在這兩份名冊。 */
+export async function resolveListedMarket(stockId: string): Promise<ListedMarket | null> {
+  const id = stockId.trim();
+  if (!/^\d{4,6}$/.test(id)) return null;
+  const registry = await getRegistry();
+  return registry.idToMarket.get(id) ?? null;
 }
 
 export async function resolveStockNameById(stockId: string): Promise<string | null> {
