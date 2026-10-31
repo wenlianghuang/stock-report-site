@@ -1,68 +1,7 @@
 /**
- * 證交所當下報價，以及舊的一分鐘 K。
+ * 證交所當下報價。
  * 盤中撮合只用當下報價，不用最高價、最低價。
  */
-
-import { taipeiParts, SESSION_CUTOFF_MINUTES, SESSION_OPEN_MINUTES } from "@/lib/paper-trade";
-
-export type MinuteBar = {
-  /** 這一分鐘的開始，UTC ISO。 */
-  at: string;
-  open: number;
-  high: number;
-  low: number;
-  last: number;
-};
-
-export function isCompletedSessionBar(barAt: string, sessionDate: string, now: Date): boolean {
-  const start = Date.parse(barAt);
-  if (!Number.isFinite(start)) return false;
-  if (start + 60_000 > now.getTime()) return false;
-  const parts = taipeiParts(new Date(start));
-  if (parts.isoDate !== sessionDate) return false;
-  return parts.minutes >= SESSION_OPEN_MINUTES && parts.minutes < SESSION_CUTOFF_MINUTES;
-}
-
-/** 這一分鐘的結束晚於下單時間，才用來撮合。下單前已經走完的 K 不算。 */
-export function barFollowsOrder(barAt: string, submittedAt: string): boolean {
-  const start = Date.parse(barAt);
-  const submitted = Date.parse(submittedAt);
-  if (!Number.isFinite(start) || !Number.isFinite(submitted)) return false;
-  return start + 60_000 > submitted;
-}
-
-export function minuteBarsFromChart(input: {
-  sessionDate: string;
-  now: Date;
-  timestamps: Array<number | null | undefined>;
-  open: Array<number | null | undefined>;
-  high: Array<number | null | undefined>;
-  low: Array<number | null | undefined>;
-  close: Array<number | null | undefined>;
-}): MinuteBar[] {
-  const bars: MinuteBar[] = [];
-  for (let index = 0; index < input.timestamps.length; index += 1) {
-    const timestamp = input.timestamps[index];
-    if (typeof timestamp !== "number") continue;
-    const at = new Date(timestamp * 1000).toISOString();
-    if (!isCompletedSessionBar(at, input.sessionDate, input.now)) continue;
-    const open = toCents(input.open[index]);
-    const high = toCents(input.high[index]);
-    const low = toCents(input.low[index]);
-    const last = toCents(input.close[index]);
-    if (open === null || high === null || low === null || last === null) continue;
-    bars.push({ at, open, high, low, last });
-  }
-  bars.sort((a, b) => a.at.localeCompare(b.at));
-  return bars;
-}
-
-function toCents(value: number | null | undefined): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
-  const cents = Math.round(value * 100);
-  if (!Number.isSafeInteger(cents) || cents <= 0) return null;
-  return cents;
-}
 
 /** 證交所一次報價。價格是分；沒有的欄位是 null。 */
 export type LiveQuote = {

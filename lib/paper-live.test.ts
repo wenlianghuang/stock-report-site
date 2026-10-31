@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { weekdayCalendar } from "./paper-calendar";
-import { matchPrint, matchQuote } from "./paper-live";
-import type { LiveQuote, MinuteBar } from "./paper-quote";
+import { matchQuote } from "./paper-live";
+import type { LiveQuote } from "./paper-quote";
 import type { WorkingPaperOrder } from "./paper-trade";
 
 const calendar = weekdayCalendar();
@@ -18,70 +18,6 @@ function order(patch: Partial<WorkingPaperOrder> = {}): WorkingPaperOrder {
     ...patch,
   };
 }
-
-function bar(patch: Partial<MinuteBar> = {}): MinuteBar {
-  return {
-    at: "2026-10-28T03:20:00.000Z",
-    open: 3_500,
-    high: 3_530,
-    low: 3_490,
-    last: 3_515,
-    ...patch,
-  };
-}
-
-describe("matchPrint", () => {
-  it("fills a limit sell at the limit when the high touches and the last has fallen back", () => {
-    const matched = matchPrint(order(), bar(), calendar);
-    expect(matched.status).toBe("filled");
-    if (matched.status !== "filled") return;
-    expect(matched.fillPriceCents).toBe(3_520);
-  });
-
-  it("fills a limit sell at the last price while it is still at or above the limit", () => {
-    const matched = matchPrint(order(), bar({ last: 3_525, high: 3_530 }), calendar);
-    expect(matched).toMatchObject({ status: "filled", fillPriceCents: 3_525 });
-  });
-
-  it("leaves a limit sell working when the high never reaches the limit", () => {
-    expect(matchPrint(order(), bar({ high: 3_510, last: 3_500 }), calendar)).toEqual({
-      status: "waiting",
-    });
-  });
-
-  it("fills a limit buy when the low touches, using the limit if the last has bounced", () => {
-    const matched = matchPrint(
-      order({
-        side: "buy",
-        reservedCashCents: 4_000_000,
-        reservedShares: 0,
-      }),
-      bar({ low: 3_500, last: 3_530, high: 3_540 }),
-      calendar,
-    );
-    expect(matched).toMatchObject({ status: "filled", fillPriceCents: 3_520 });
-  });
-
-  it("fills a market order at the minute's last price", () => {
-    const matched = matchPrint(
-      order({
-        side: "buy",
-        orderType: "market",
-        limitPriceCents: null,
-        shares: 1,
-        reservedCashCents: 500_000,
-        reservedShares: 0,
-      }),
-      bar({ last: 3_515 }),
-      calendar,
-    );
-    expect(matched).toMatchObject({ status: "filled", fillPriceCents: 3_515, shares: 1 });
-  });
-
-  it("skips a bar with a price outside its own range", () => {
-    expect(matchPrint(order(), bar({ last: 3_600 }), calendar)).toEqual({ status: "unusable" });
-  });
-});
 
 function quote(patch: Partial<LiveQuote> = {}): LiveQuote {
   return {

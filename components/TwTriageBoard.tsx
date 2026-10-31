@@ -50,7 +50,15 @@ function parseCustomIds(raw: string): string[] {
   ];
 }
 
-export function TwTriageBoard() {
+export function TwTriageBoard({
+  themeId: controlledThemeId,
+  source: controlledSource,
+  embedded = false,
+}: {
+  themeId?: string;
+  source?: Source;
+  embedded?: boolean;
+} = {}) {
   const router = useRouter();
   const [holdings, setHoldings] = useState<HoldingChip[]>([]);
   const [themes, setThemes] = useState<ConceptGroup[]>([]);
@@ -58,8 +66,8 @@ export function TwTriageBoard() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
-  const [source, setSource] = useState<Source>("holdings");
-  const [themeId, setThemeId] = useState("");
+  const [source, setSource] = useState<Source>(controlledSource ?? "holdings");
+  const [themeId, setThemeId] = useState(controlledThemeId ?? "");
   const [customText, setCustomText] = useState("");
   const [topK, setTopK] = useState(3);
   const [fetchMissing, setFetchMissing] = useState(false);
@@ -72,6 +80,16 @@ export function TwTriageBoard() {
   const [chartStock, setChartStock] = useState<{ stockId: string; stockName: string } | null>(
     null,
   );
+  if (controlledThemeId && themeId !== controlledThemeId) {
+    setThemeId(controlledThemeId);
+    setResult(null);
+    setRunError("");
+  }
+  if (controlledSource && source !== controlledSource) {
+    setSource(controlledSource);
+    setResult(null);
+    setRunError("");
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -105,11 +123,12 @@ export function TwTriageBoard() {
         const nextHoldings = holdingPayload.holdings ?? [];
         setHoldings(nextHoldings);
         setThemes(nextThemes);
-        setThemeId(nextThemes[0]?.themeId ?? "");
+        setThemeId((current) => current || nextThemes[0]?.themeId || "");
         setTradeDate(nextDate);
-        if (nextHoldings.length === 0) {
-          setSource(nextThemes.length > 0 ? "theme" : "custom");
-        }
+        setSource((current) => {
+          if (current !== "holdings" || nextHoldings.length > 0) return current;
+          return nextThemes.length > 0 ? "theme" : "custom";
+        });
       } catch (error) {
         if (!cancelled) {
           setLoadError(error instanceof Error ? error.message : "無法載入");
@@ -231,34 +250,36 @@ export function TwTriageBoard() {
       </div>
 
       <div className="flex flex-col gap-4 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-zinc-500">範圍</span>
-          <button
-            type="button"
-            onClick={() => setSource("holdings")}
-            disabled={holdings.length === 0}
-            className={`rounded-lg border px-3 py-1.5 text-sm disabled:opacity-50 ${choiceClass(source === "holdings")}`}
-          >
-            我的持股（{holdings.length}）
-          </button>
-          <button
-            type="button"
-            onClick={() => setSource("theme")}
-            disabled={themes.length === 0}
-            className={`rounded-lg border px-3 py-1.5 text-sm disabled:opacity-50 ${choiceClass(source === "theme")}`}
-          >
-            主題池
-          </button>
-          <button
-            type="button"
-            onClick={() => setSource("custom")}
-            className={`rounded-lg border px-3 py-1.5 text-sm ${choiceClass(source === "custom")}`}
-          >
-            自訂代號
-          </button>
-        </div>
+        {embedded ? null : (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-zinc-500">範圍</span>
+            <button
+              type="button"
+              onClick={() => setSource("holdings")}
+              disabled={holdings.length === 0}
+              className={`rounded-lg border px-3 py-1.5 text-sm disabled:opacity-50 ${choiceClass(source === "holdings")}`}
+            >
+              我的持股（{holdings.length}）
+            </button>
+            <button
+              type="button"
+              onClick={() => setSource("theme")}
+              disabled={themes.length === 0}
+              className={`rounded-lg border px-3 py-1.5 text-sm disabled:opacity-50 ${choiceClass(source === "theme")}`}
+            >
+              主題池
+            </button>
+            <button
+              type="button"
+              onClick={() => setSource("custom")}
+              className={`rounded-lg border px-3 py-1.5 text-sm ${choiceClass(source === "custom")}`}
+            >
+              自訂代號
+            </button>
+          </div>
+        )}
 
-        {source === "theme" ? (
+        {!embedded && source === "theme" ? (
           <div className="flex flex-wrap gap-2">
             {themes.map((theme) => (
               <button

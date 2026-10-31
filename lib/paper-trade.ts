@@ -252,15 +252,6 @@ export function closeAuctionReady(now: Date, sessionDate: string): boolean {
   return minutes >= SESSION_CUTOFF_MINUTES;
 }
 
-/** 舊的分鐘線窗口：交易日 09:00 起，收盤後仍可回補。盤中報價改看 intradayQuoteReady。 */
-export function liveMatchingReady(now: Date, sessionDate: string): boolean {
-  if (!isIsoDate(sessionDate)) return false;
-  const { isoDate, minutes } = taipeiParts(now);
-  if (isoDate > sessionDate) return true;
-  if (isoDate < sessionDate) return false;
-  return minutes >= SESSION_OPEN_MINUTES;
-}
-
 /** 只有該交易日 09:00–13:30 用當下報價。離開這段就沒有報價可回放。 */
 export function intradayQuoteReady(now: Date, sessionDate: string): boolean {
   if (!isIsoDate(sessionDate)) return false;

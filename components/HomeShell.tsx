@@ -1,19 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { TwStockDashboard } from "@/components/TwStockDashboard";
 import { TwPortfolioDashboard } from "@/components/TwPortfolioDashboard";
 import { TwMarketWeeklyDashboard } from "@/components/TwMarketWeeklyDashboard";
 import { TwMarketDailyDashboard } from "@/components/TwMarketDailyDashboard";
-import { TwConceptBoard } from "@/components/TwConceptBoard";
-import { TwTriageBoard } from "@/components/TwTriageBoard";
+import { TwMarketCloseDashboard } from "@/components/TwMarketCloseDashboard";
+import { ThemeWorkspace } from "@/components/ThemeWorkspace";
 import { UsStockDashboard } from "@/components/UsStockDashboard";
 import { PaperTradingDashboard } from "@/components/PaperTradingDashboard";
+import { canonicalThemeSearch, readThemeNav, type ThemeLens } from "@/lib/theme-nav";
+import { parseDailyBrief, type DailyBrief } from "@/lib/daily-brief";
 
 type MarketTab = "tw" | "us";
-type TwView = "chip" | "triage" | "portfolio" | "groups" | "weekly" | "daily" | "paper";
+type TwView = "chip" | "portfolio" | "theme" | "weekly" | "daily" | "paper";
 
 function tabClass(active: boolean): string {
   return active
@@ -22,52 +24,80 @@ function tabClass(active: boolean): string {
 }
 
 function parseTwView(raw: string | null): TwView {
-  if (raw === "triage") return "triage";
   if (raw === "portfolio") return "portfolio";
-  if (raw === "groups") return "groups";
   if (raw === "weekly") return "weekly";
   if (raw === "daily") return "daily";
   if (raw === "paper") return "paper";
+  if (raw === "theme" || raw === "triage" || raw === "groups" || raw === "concept-news") {
+    return "theme";
+  }
   return "chip";
 }
+
+const THEME_LENSES: { id: ThemeLens; label: string; title: string }[] = [
+  { id: "news", label: "新聞", title: "題材新聞" },
+  { id: "peers", label: "同儕", title: "族群比較" },
+  { id: "changes", label: "今日變化", title: "今日分流" },
+];
 
 export function HomeShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const market: MarketTab = searchParams.get("market") === "us" ? "us" : "tw";
-  const twView: TwView = parseTwView(searchParams.get("view"));
+  const rawView = searchParams.get("view");
+  const twView: TwView = parseTwView(rawView);
+  const themeNav = readThemeNav({
+    view: rawView,
+    lens: searchParams.get("lens"),
+    scope: searchParams.get("scope"),
+  });
+  const dailyBrief: DailyBrief = parseDailyBrief(searchParams.get("brief"));
   const [loggingOut, setLoggingOut] = useState(false);
+
+  useEffect(() => {
+    const next = canonicalThemeSearch(searchParams);
+    if (!next) return;
+    if (next.toString() === searchParams.toString()) return;
+    router.replace(`/?${next.toString()}`);
+  }, [searchParams, router]);
 
   function selectMarket(next: MarketTab) {
     router.replace(next === "us" ? "/?market=us" : "/");
   }
 
   function selectTwView(next: TwView) {
-    if (next === "triage") {
-      router.replace("/?view=triage");
+    if (next === "theme") {
+      if (twView === "theme" && themeNav.scope === "theme") return;
+      const params = new URLSearchParams();
+      params.set("view", "theme");
+      params.set("lens", "news");
+      params.set("scope", "theme");
+      const theme = searchParams.get("theme");
+      if (theme) params.set("theme", theme);
+      router.replace(`/?${params.toString()}`);
       return;
     }
-    if (next === "portfolio") {
-      router.replace("/?view=portfolio");
+    if (next === "chip") {
+      router.replace("/");
       return;
     }
-    if (next === "groups") {
-      router.replace("/?view=groups");
-      return;
-    }
-    if (next === "weekly") {
-      router.replace("/?view=weekly");
-      return;
-    }
-    if (next === "daily") {
-      router.replace("/?view=daily");
-      return;
-    }
-    if (next === "paper") {
-      router.replace("/?view=paper");
-      return;
-    }
-    router.replace("/");
+    router.replace(`/?view=${next}`);
+  }
+
+  function selectThemeLens(next: ThemeLens) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("market");
+    params.set("view", "theme");
+    params.set("scope", "theme");
+    params.set("lens", next);
+    router.replace(`/?${params.toString()}`);
+  }
+
+  function selectDailyBrief(next: DailyBrief) {
+    const params = new URLSearchParams();
+    params.set("view", "daily");
+    if (next === "close") params.set("brief", "close");
+    router.replace(`/?${params.toString()}`);
   }
 
   async function logout() {
@@ -85,9 +115,8 @@ export function HomeShell() {
 
   const wide =
     market === "tw" &&
-    (twView === "triage" ||
+    (twView === "theme" ||
       twView === "portfolio" ||
-      twView === "groups" ||
       twView === "weekly" ||
       twView === "daily" ||
       twView === "paper");
@@ -148,13 +177,6 @@ export function HomeShell() {
               </button>
               <button
                 type="button"
-                onClick={() => selectTwView("triage")}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(twView === "triage")}`}
-              >
-                今日分流
-              </button>
-              <button
-                type="button"
                 onClick={() => selectTwView("portfolio")}
                 className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(twView === "portfolio")}`}
               >
@@ -162,10 +184,10 @@ export function HomeShell() {
               </button>
               <button
                 type="button"
-                onClick={() => selectTwView("groups")}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(twView === "groups")}`}
+                onClick={() => selectTwView("theme")}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(twView === "theme")}`}
               >
-                族群比較
+                題材
               </button>
               <button
                 type="button"
@@ -179,7 +201,7 @@ export function HomeShell() {
                 onClick={() => selectTwView("daily")}
                 className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(twView === "daily")}`}
               >
-                開盤前日報
+                日報
               </button>
               <button
                 type="button"
@@ -187,6 +209,47 @@ export function HomeShell() {
                 className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(twView === "paper")}`}
               >
                 模擬交易
+              </button>
+            </nav>
+          ) : null}
+
+          {market === "tw" && twView === "theme" && themeNav.scope === "theme" ? (
+            <nav
+              aria-label="題材鏡頭"
+              className="inline-flex w-fit flex-wrap rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900"
+            >
+              {THEME_LENSES.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  title={item.title}
+                  onClick={() => selectThemeLens(item.id)}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(themeNav.lens === item.id)}`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+          ) : null}
+
+          {market === "tw" && twView === "daily" ? (
+            <nav
+              aria-label="日報種類"
+              className="inline-flex w-fit flex-wrap rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900"
+            >
+              <button
+                type="button"
+                onClick={() => selectDailyBrief("open")}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(dailyBrief === "open")}`}
+              >
+                開盤前日報
+              </button>
+              <button
+                type="button"
+                onClick={() => selectDailyBrief("close")}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tabClass(dailyBrief === "close")}`}
+              >
+                收盤日報
               </button>
             </nav>
           ) : null}
@@ -198,16 +261,14 @@ export function HomeShell() {
       >
         {market === "us" ? (
           <UsStockDashboard />
-        ) : twView === "triage" ? (
-          <TwTriageBoard />
         ) : twView === "portfolio" ? (
           <TwPortfolioDashboard />
-        ) : twView === "groups" ? (
-          <TwConceptBoard />
+        ) : twView === "theme" ? (
+          <ThemeWorkspace />
         ) : twView === "weekly" ? (
           <TwMarketWeeklyDashboard />
         ) : twView === "daily" ? (
-          <TwMarketDailyDashboard />
+          dailyBrief === "close" ? <TwMarketCloseDashboard /> : <TwMarketDailyDashboard />
         ) : twView === "paper" ? (
           <PaperTradingDashboard />
         ) : (

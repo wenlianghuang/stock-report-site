@@ -900,6 +900,82 @@ export type MarketDailyRecord = {
   updatedAt: string;
 };
 
+export type MarketCloseLeader = {
+  stock_id: string;
+  name: string;
+  close?: number | null;
+  day_return_pct?: number | null;
+  price_status?: string;
+  foreign_net_lots?: number | null;
+  trust_net_lots?: number | null;
+  dealer_net_lots?: number | null;
+  institutional_status?: string;
+};
+
+export type MarketCloseFacts = {
+  trade_date?: string;
+  cutover?: string;
+  market?: {
+    available?: boolean;
+    close?: number | null;
+    day_return_pct?: number | null;
+    close_in_day_range_pct?: number | null;
+    open?: number | null;
+    high?: number | null;
+    low?: number | null;
+  };
+  volume?: {
+    available?: boolean;
+    vs_avg5_ratio?: number | null;
+    regime?: string | null;
+  };
+  institutional?: {
+    available?: boolean;
+    consensus?: string;
+    consensus_label?: string;
+    foreign_net?: number | null;
+    trust_net?: number | null;
+    dealer_net?: number | null;
+    total_net?: number | null;
+  };
+  leaders?: MarketCloseLeader[];
+  news_titles?: string[];
+  news_items?: Array<{
+    title: string;
+    stock_id?: string;
+    name?: string;
+    publisher?: string | null;
+    date?: string | null;
+  }>;
+};
+
+export type MarketCloseJob = {
+  id: string;
+  status: string;
+  trade_date?: string | null;
+  as_of?: string | null;
+  error?: string | null;
+  facts?: MarketCloseFacts | null;
+  summary?: MarketCloseFacts | null;
+  markdown?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type MarketCloseRecord = {
+  id: string;
+  userId: string;
+  agentJobId: string;
+  status: "queued" | "gating" | "done" | "failed";
+  tradeDate?: string;
+  error?: string;
+  markdown?: string;
+  factsJson?: MarketCloseFacts;
+  summaryJson?: MarketCloseFacts;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type MarketDailyRow = {
   id: string;
   user_id: string;
@@ -913,6 +989,78 @@ export type MarketDailyRow = {
   summary_json: MarketDaySummary | null;
   created_at: string;
   updated_at: string;
+};
+
+export type ConceptNewsTheme = {
+  theme_id: string;
+  label: string;
+  member_count: number;
+};
+
+export type ConceptNewsReportMeta = {
+  date: string;
+  label: string;
+  has_events: boolean;
+  has_summary: boolean;
+  event_count: number;
+};
+
+export type ConceptNewsEventSource = {
+  title: string;
+  url: string;
+  publisher: string;
+  published: string;
+  summary: string;
+};
+
+export type ConceptNewsEvent = {
+  event_id: string;
+  title: string;
+  published: string;
+  mentioned_ids: string[];
+  theme_only: boolean;
+  sources: ConceptNewsEventSource[];
+};
+
+export type ConceptNewsEventTable = {
+  theme_id?: string;
+  label?: string;
+  as_of?: string;
+  events: ConceptNewsEvent[];
+};
+
+export type ConceptNewsReport = {
+  theme_id: string;
+  label: string;
+  date: string;
+  has_events: boolean;
+  has_summary: boolean;
+  event_count: number;
+  summary: string | null;
+  events: ConceptNewsEventTable | null;
+};
+
+export type ConceptNewsJob = {
+  id: string;
+  status: string;
+  theme_id: string;
+  label?: string | null;
+  as_of?: string | null;
+  error?: string | null;
+  searched?: boolean;
+  reused?: boolean;
+  summary?: string | null;
+  events?: ConceptNewsEventTable | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ConceptNewsAnswer = {
+  theme_id: string;
+  date: string;
+  answer: string;
+  found: boolean;
+  event_ids: string[];
 };
 
 export function rowToMarketDaily(row: MarketDailyRow): MarketDailyRecord {

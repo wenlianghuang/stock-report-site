@@ -99,20 +99,42 @@ const markdownComponents = {
   },
 };
 
-function ReportMarkdown({ source }: { source: string }) {
+function ReportMarkdown({
+  source,
+  externalLinks,
+}: {
+  source: string;
+  externalLinks?: boolean;
+}) {
+  const components = externalLinks
+    ? {
+        ...markdownComponents,
+        a: ({ href, children }: { href?: string; children?: ReactNode }) => (
+          <a href={href} target="_blank" rel="noreferrer">
+            {children}
+          </a>
+        ),
+      }
+    : markdownComponents;
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
       {source}
     </ReactMarkdown>
   );
 }
 
-export function MarkdownReport({ markdown }: { markdown: string }) {
+export function MarkdownReport({
+  markdown,
+  externalLinks = false,
+}: {
+  markdown: string;
+  externalLinks?: boolean;
+}) {
   const { before, baseRateTitle, baseRateBody, after } = splitBaseRate(markdown);
 
   return (
     <article className="report-markdown max-w-none">
-      {before ? <ReportMarkdown source={before} /> : null}
+      {before ? <ReportMarkdown source={before} externalLinks={externalLinks} /> : null}
 
       {baseRateTitle ? (
         <details className="my-4 rounded-lg border border-zinc-200 dark:border-zinc-800">
@@ -123,12 +145,12 @@ export function MarkdownReport({ markdown }: { markdown: string }) {
             </span>
           </summary>
           <div className="px-4 pb-4">
-            <ReportMarkdown source={baseRateBody} />
+            <ReportMarkdown source={baseRateBody} externalLinks={externalLinks} />
           </div>
         </details>
       ) : null}
 
-      {after ? <ReportMarkdown source={after} /> : null}
+      {after ? <ReportMarkdown source={after} externalLinks={externalLinks} /> : null}
     </article>
   );
 }

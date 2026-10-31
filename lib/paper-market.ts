@@ -4,7 +4,7 @@
  */
 
 import { parseTwseHolidayCsv, twseCalendar, type TradingCalendar } from "@/lib/paper-calendar";
-import { liveQuotesFromMis, minuteBarsFromChart, type LiveQuote, type MinuteBar } from "@/lib/paper-quote";
+import { liveQuotesFromMis, type LiveQuote } from "@/lib/paper-quote";
 import { taipeiParts, type PaperMarket } from "@/lib/paper-trade";
 
 const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/";
@@ -13,11 +13,9 @@ const MIS_QUOTE = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp";
 const USER_AGENT = "Mozilla/5.0 (compatible; stock-report-site/paper)";
 
 const closeCache = new Map<string, { expiresAt: number; closes: Map<string, number> }>();
-const minuteCache = new Map<string, { expiresAt: number; bars: MinuteBar[] }>();
 const quoteCache = new Map<string, { expiresAt: number; quote: LiveQuote }>();
 const calendarCache = new Map<number, { expiresAt: number; csv: string }>();
 const CACHE_TTL_MS = 30 * 60 * 1000;
-const MINUTE_TTL_MS = 20 * 1000;
 const QUOTE_TTL_MS = 8 * 1000;
 
 export function yahooSymbol(stockId: string, market: PaperMarket): string {
@@ -89,63 +87,6 @@ export async function fetchDailyCloses(
   return closes;
 }
 
-/** 該交易日已經走完的一分鐘 K。盤中撮合不再呼叫，抓不到即時報價時也不改回這裡。 */
-export async function fetchMinuteBars(
-  stockId: string,
-  market: PaperMarket,
-  sessionDate: string,
-  now: Date,
-): Promise<MinuteBar[]> {
-  const symbol = yahooSymbol(stockId, market);
-  const cacheKey = `${symbol}:${sessionDate}`;
-  const cached = minuteCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.bars;
-
-  const url = new URL(`${YAHOO_CHART}${encodeURIComponent(symbol)}`);
-  url.searchParams.set("interval", "1m");
-  url.searchParams.set("range", "5d");
-  url.searchParams.set("includePrePost", "false");
-
-  const response = await fetch(url, {
-    headers: { "User-Agent": USER_AGENT },
-    cache: "no-store",
-  });
-  if (response.status === 404) return [];
-  if (!response.ok) {
-    throw new Error(`Yahoo Finance 回應 ${response.status}（${symbol}）`);
-  }
-
-  const payload = (await response.json()) as {
-    chart?: {
-      result?: Array<{
-        timestamp?: number[];
-        indicators?: {
-          quote?: Array<{
-            open?: Array<number | null>;
-            high?: Array<number | null>;
-            low?: Array<number | null>;
-            close?: Array<number | null>;
-          }>;
-        };
-      }>;
-    };
-  };
-  const quote = payload.chart?.result?.[0];
-  const bars = quote
-    ? minuteBarsFromChart({
-        sessionDate,
-        now,
-        timestamps: quote.timestamp ?? [],
-        open: quote.indicators?.quote?.[0]?.open ?? [],
-        high: quote.indicators?.quote?.[0]?.high ?? [],
-        low: quote.indicators?.quote?.[0]?.low ?? [],
-        close: quote.indicators?.quote?.[0]?.close ?? [],
-      })
-    : [];
-  minuteCache.set(cacheKey, { expiresAt: Date.now() + MINUTE_TTL_MS, bars });
-  return bars;
-}
-
 export type LiveQuoteRequest = {
   stockId: string;
   market: PaperMarket;
@@ -154,7 +95,7 @@ export type LiveQuoteRequest = {
 /**
  * 證交所公開行情，一次可以問多檔，上市與上櫃都走同一個位址。
  * refresh 為 true 時略過快取，讓剛送出的單看到下單之後的報價。
- * 抓不到就略過該檔，不改回一分鐘線。
+ * 抓不到就略過該檔。
  */
 export async function fetchLiveQuotes(
   instruments: readonly LiveQuoteRequest[],

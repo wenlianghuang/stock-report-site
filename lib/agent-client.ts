@@ -2,6 +2,12 @@ import type {
   AgentJob,
   ChipFacts,
   HistoryDay,
+  ConceptNewsAnswer,
+  ConceptNewsJob,
+  ConceptNewsReport,
+  ConceptNewsReportMeta,
+  ConceptNewsTheme,
+  MarketCloseJob,
   MarketDailyChatHistoryItem,
   MarketDailyJob,
   MarketWeeklyJob,
@@ -9,6 +15,7 @@ import type {
   PortfolioProfile,
   PortfolioResult,
 } from "./types";
+import type { SharedMarketCloseItem } from "./market-close-shared";
 
 export type StockChart = {
   stockId: string;
@@ -1504,5 +1511,209 @@ export async function chatStockReportStream(
     },
   );
   return response;
+}
+
+async function agentError(response: Response, fallback: string): Promise<Error> {
+  let detail = "";
+  try {
+    const data = (await response.json()) as { detail?: string; error?: string };
+    detail = data.detail || data.error || "";
+  } catch {
+    detail = await response.text();
+  }
+  return new Error(detail || fallback);
+}
+
+export async function listConceptNewsThemes(): Promise<ConceptNewsTheme[]> {
+  const response = await fetch(`${baseUrl()}/concept-news/themes`, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw await agentError(response, `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as { themes?: ConceptNewsTheme[] };
+  return payload.themes ?? [];
+}
+
+export async function listConceptNewsReports(
+  theme: string,
+): Promise<{ items: ConceptNewsReportMeta[]; newsAsOf: string }> {
+  const params = new URLSearchParams({ theme });
+  const response = await fetch(
+    `${baseUrl()}/concept-news/reports?${params.toString()}`,
+    { headers: agentHeaders(), cache: "no-store" },
+  );
+  if (!response.ok) {
+    throw await agentError(response, `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as {
+    items?: ConceptNewsReportMeta[];
+    news_as_of?: string;
+  };
+  return { items: payload.items ?? [], newsAsOf: payload.news_as_of ?? "" };
+}
+
+export async function getConceptNewsReport(
+  theme: string,
+  date: string,
+): Promise<ConceptNewsReport> {
+  const response = await fetch(
+    `${baseUrl()}/concept-news/reports/${encodeURIComponent(theme)}/${encodeURIComponent(date)}`,
+    { headers: agentHeaders(), cache: "no-store" },
+  );
+  if (!response.ok) {
+    throw await agentError(response, `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as { report: ConceptNewsReport };
+  return payload.report;
+}
+
+export async function createConceptNewsJob(input: {
+  theme: string;
+  date?: string;
+  force?: boolean;
+}): Promise<ConceptNewsJob> {
+  const body: Record<string, unknown> = { theme: input.theme };
+  if (input.date) body.date = input.date;
+  if (input.force) body.force = true;
+  const response = await fetch(`${baseUrl()}/concept-news/jobs`, {
+    method: "POST",
+    headers: agentHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw await agentError(response, `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as { job: ConceptNewsJob };
+  return payload.job;
+}
+
+export async function getConceptNewsJob(jobId: string): Promise<ConceptNewsJob> {
+  const response = await fetch(
+    `${baseUrl()}/concept-news/jobs/${encodeURIComponent(jobId)}`,
+    { headers: agentHeaders(), cache: "no-store" },
+  );
+  if (!response.ok) {
+    throw await agentError(response, `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as { job: ConceptNewsJob };
+  return payload.job;
+}
+
+export async function askConceptNews(input: {
+  theme: string;
+  date: string;
+  message: string;
+}): Promise<ConceptNewsAnswer> {
+  const response = await fetch(`${baseUrl()}/concept-news/ask`, {
+    method: "POST",
+    headers: agentHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      theme: input.theme,
+      date: input.date,
+      message: input.message,
+    }),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw await agentError(response, `Agent API error ${response.status}`);
+  }
+  return (await response.json()) as ConceptNewsAnswer;
+}
+
+export async function listMarketCloseBriefs(): Promise<{
+  items: SharedMarketCloseItem[];
+  shared: boolean;
+}> {
+  const response = await fetch(`${baseUrl()}/market-close`, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as {
+    items?: SharedMarketCloseItem[];
+    shared?: boolean;
+  };
+  return { items: payload.items ?? [], shared: payload.shared !== false };
+}
+
+export async function getMarketCloseCurrent(input?: {
+  asOf?: string;
+  tradeDate?: string;
+}): Promise<{
+  window: { trade_date: string; cutover?: string; resolved_as_of?: string };
+  ready: boolean;
+  brief: SharedMarketCloseItem;
+}> {
+  const params = new URLSearchParams();
+  if (input?.asOf) params.set("as_of", input.asOf);
+  if (input?.tradeDate) params.set("trade_date", input.tradeDate);
+  const qs = params.toString();
+  const response = await fetch(`${baseUrl()}/market-close/current${qs ? `?${qs}` : ""}`, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Agent API error ${response.status}`);
+  }
+  return (await response.json()) as {
+    window: { trade_date: string; cutover?: string; resolved_as_of?: string };
+    ready: boolean;
+    brief: SharedMarketCloseItem;
+  };
+}
+
+export async function createMarketCloseJob(input?: {
+  force?: boolean;
+  tradeDate?: string;
+  asOf?: string;
+}): Promise<MarketCloseJob> {
+  const response = await fetch(`${baseUrl()}/market-close/jobs`, {
+    method: "POST",
+    headers: agentHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      force: Boolean(input?.force),
+      trade_date: input?.tradeDate,
+      as_of: input?.asOf,
+    }),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      detail = data.detail ?? "";
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail || `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as { job: MarketCloseJob };
+  return payload.job;
+}
+
+export async function getMarketCloseJob(jobId: string): Promise<MarketCloseJob> {
+  const response = await fetch(`${baseUrl()}/market-close/jobs/${jobId}`, {
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      detail = data.detail ?? "";
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail || `Agent API error ${response.status}`);
+  }
+  const payload = (await response.json()) as { job: MarketCloseJob };
+  return payload.job;
 }
 

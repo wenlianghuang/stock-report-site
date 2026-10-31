@@ -80,11 +80,21 @@ function preferredTheme(themes: ConceptGroup[], holdingIds: Set<string>): string
   return best?.themeId ?? themes[0]?.themeId ?? null;
 }
 
-export function TwConceptBoard() {
+export function TwConceptBoard({
+  themeId: controlledThemeId,
+  themePick = 0,
+  embedded = false,
+}: {
+  themeId?: string;
+  themePick?: number;
+  embedded?: boolean;
+} = {}) {
   const [themes, setThemes] = useState<ConceptGroup[]>([]);
   const [holdings, setHoldings] = useState<HoldingChip[]>([]);
   const [tradeDate, setTradeDate] = useState("");
-  const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
+  const [selectedTheme, setSelectedTheme] = useState<string | null>(controlledThemeId ?? null);
+  const [appliedTheme, setAppliedTheme] = useState(controlledThemeId);
+  const [appliedPick, setAppliedPick] = useState(themePick);
   const [holdingsOnly, setHoldingsOnly] = useState(false);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [narrow, setNarrow] = useState(false);
@@ -100,6 +110,18 @@ export function TwConceptBoard() {
   const [chartStock, setChartStock] = useState<{ stockId: string; stockName: string } | null>(
     null,
   );
+  if (
+    embedded &&
+    controlledThemeId &&
+    (controlledThemeId !== appliedTheme || themePick !== appliedPick)
+  ) {
+    setAppliedTheme(controlledThemeId);
+    setAppliedPick(themePick);
+    setSelectedTheme(controlledThemeId);
+    setHoldingsOnly(false);
+    setChecked(new Set());
+    setNarrow(false);
+  }
 
   const holdingIds = useMemo(
     () => new Set(holdings.map((holding) => holding.stockId)),
@@ -146,7 +168,9 @@ export function TwConceptBoard() {
         setHoldings(nextHoldings);
         setTradeDate(nextDate);
         setSelectedTheme(
-          preferredTheme(nextThemes, new Set(nextHoldings.map((item) => item.stockId))),
+          (current) =>
+            current ??
+            preferredTheme(nextThemes, new Set(nextHoldings.map((item) => item.stockId))),
         );
       } catch (error) {
         if (!cancelled) {
@@ -434,7 +458,9 @@ export function TwConceptBoard() {
         >
           只看持股
         </button>
-        {themes.map((theme) => {
+        {embedded
+          ? null
+          : themes.map((theme) => {
           const active = selectedTheme === theme.themeId;
           const held = theme.members.some((member) => holdingIds.has(member.stockId));
           return (
