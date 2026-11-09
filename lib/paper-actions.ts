@@ -1,6 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { previousTradingDay } from "@/lib/paper-calendar";
-import { loadPaperBook, placePaperOrder, cancelPaperOrder, applyPaperClose } from "@/lib/paper-db";
+import {
+  applyPaperClose,
+  cancelPaperOrder,
+  loadPaperBook,
+  placePaperOrder,
+  purgeStalePaperOrders,
+} from "@/lib/paper-db";
 import { fetchDailyCloses, fetchLiveQuotes, loadTradingCalendar } from "@/lib/paper-market";
 import { placeOnBook, runPaperTick } from "@/lib/paper-session";
 import type { LiveQuote } from "@/lib/paper-quote";
@@ -109,6 +115,7 @@ async function closeOnce(
   calendar: Awaited<ReturnType<typeof loadTradingCalendar>>,
   attempt = 0,
 ) {
+  await purgeStalePaperOrders(taipeiParts(now).isoDate);
   const book = await loadPaperBook(cashCents);
   const [closes, quotes] = await Promise.all([loadCloses(book), loadQuotes(book, now)]);
   const run = runPaperTick(book, {
@@ -143,6 +150,7 @@ async function closeOnce(
 
 export async function loadPaperSnapshotForUser(now = new Date()): Promise<PaperSnapshot> {
   const account = await ensurePaperAccount();
+  await purgeStalePaperOrders(taipeiParts(now).isoDate);
   const supabase = await createClient();
   const [orders, fills, settlements, positions] = await Promise.all([
     supabase.from("paper_orders").select("*"),

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { PaperLedgerAsk } from "@/components/PaperLedgerAsk";
 import type { PaperRecordOutcome, PaperSnapshot } from "@/lib/paper-view";
 import type { PaperOrderType, PaperSide } from "@/lib/paper-trade";
 
@@ -191,6 +192,7 @@ export function PaperTradingDashboard() {
       ) : snapshot ? (
         <>
           <BalanceBar snapshot={snapshot} refreshing={refreshing} />
+          <PaperLedgerAsk />
           <OrderTicket
             snapshot={snapshot}
             onPlaced={async (message) => {

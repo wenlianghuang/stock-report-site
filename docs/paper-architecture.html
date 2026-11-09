@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>模擬帳架構：資金、進貨、存貨、銷貨</title>
+  <style>
+    :root {
+      --ink: #1c1915;
+      --muted: #5e584e;
+      --faint: #8a8378;
+      --line: #e3dcd2;
+      --paper: #f7f4ee;
+      --card: #fffcf8;
+      --cash: #1e4568;
+      --cash-bg: #e6eef6;
+      --buy: #0d6b4c;
+      --buy-bg: #e5f3ec;
+      --stock: #8a5a00;
+      --stock-bg: #fbf3dc;
+      --sell: #8d2e2e;
+      --sell-bg: #f8e8e6;
+      --shadow: 0 1px 0 rgba(28, 25, 21, 0.04);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      background: #ebe6de;
+      color: var(--ink);
+      font-family: "PingFang TC", "Noto Sans TC", "Heiti TC", sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .sheet {
+      width: min(1180px, calc(100% - 28px));
+      margin: 12px auto 16px;
+      background: var(--paper);
+      border: 1px solid #ddd4c8;
+      border-radius: 16px;
+      padding: 16px 18px 12px;
+      box-shadow: 0 12px 40px rgba(40, 32, 20, 0.08);
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: end;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .kicker {
+      margin: 0 0 4px;
+      color: var(--faint);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+
+    .thesis {
+      margin: 6px 0 0;
+      max-width: 78ch;
+      color: var(--muted);
+    }
+
+    .meta {
+      margin: 0;
+      text-align: right;
+      color: var(--faint);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .meta a { color: var(--cash); }
+
+    h2 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+    }
+
+    .words {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .word {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 9px 11px 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .word p { margin: 0; color: var(--muted); }
+    .word strong { color: var(--ink); font-weight: 650; }
+
+    .tag {
+      display: inline-block;
+      margin-bottom: 6px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+    }
+
+    .tag.erp { background: var(--stock-bg); color: var(--stock); }
+    .tag.link { background: var(--cash-bg); color: var(--cash); }
+    .tag.sql { background: var(--buy-bg); color: var(--buy); }
+
+    .flow {
+      margin-top: 10px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 10px 8px;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+    }
+
+    .step {
+      position: relative;
+      border-radius: 10px;
+      padding: 7px 7px 6px;
+    }
+
+    .step:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -7px;
+      top: 28px;
+      z-index: 1;
+      color: var(--faint);
+      font-size: 12px;
+    }
+
+    .step b {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+
+    .step span {
+      display: block;
+      color: var(--muted);
+      font-size: 11.5px;
+    }
+
+    .step code {
+      display: block;
+      margin-top: 4px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 10px;
+      color: var(--ink);
+    }
+
+    .cash { background: var(--cash-bg); color: var(--cash); }
+    .buy { background: var(--buy-bg); color: var(--buy); }
+    .stock { background: var(--stock-bg); color: var(--stock); }
+    .sell { background: var(--sell-bg); color: var(--sell); }
+
+    .notes {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .note {
+      margin: 0;
+      padding: 7px 9px;
+      border-radius: 8px;
+      background: #f3efe8;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .note strong { color: var(--ink); font-weight: 650; }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+
+    th, td {
+      padding: 3px 5px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--line);
+    }
+
+    th {
+      color: var(--faint);
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+    }
+
+    td code, .sql code, .files code {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 11.5px;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 8px 10px 6px;
+    }
+
+    .sql {
+      margin: 0;
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: #221f1b;
+      color: #f4efe6;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 10.5px;
+      line-height: 1.32;
+      overflow: auto;
+    }
+
+    .sql .c { color: #b7aa96; }
+
+    .ask {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .files {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 12px;
+      margin: 8px 0 0;
+      padding-top: 8px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11.5px;
+    }
+
+    .files span { white-space: nowrap; }
+
+    @media (max-width: 980px) {
+      header, .words, .steps, .notes, .split { grid-template-columns: 1fr; }
+      .step:not(:last-child)::after { content: none; }
+      .meta { text-align: left; }
+    }
+
+    @media print {
+      body { background: white; }
+      .sheet {
+        width: auto;
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+        padding: 0;
+      }
+      @page { size: A3 landscape; margin: 10mm; }
+    }
+  </style>
+</head>
+<body>
+  <article class="sheet">
+    <header>
+      <div>
+        <p class="kicker">PAPER LEDGER · 給接手的開發者</p>
+        <h1>模擬帳怎麼把資金記成進貨、存貨、銷貨</h1>
+        <p class="thesis">
+          這本帳是登入使用者自己的進銷存。規則在純函式裡算完，資料庫只寫一次。
+          問句先連上股票、交易日、方向和指標，再執行目錄裡那條 SELECT。
+          籌碼、報告、真實持股留在帳外。
+        </p>
+      </div>
+      <p class="meta">
+        金額單位是分。開戶 <code>100000000</code> = 100 萬元。<br />
+        細節見
+        <a href="./paper-ledger-data.md">資料邊界</a>、
+        <a href="./paper-live-trading.md">盤中撮合</a>
+      </p>
+    </header>
+
+    <section class="words" aria-label="三個詞">
+      <article class="word">
+        <span class="tag erp">ERP</span>
+        <h2>自己產生的帳</h2>
+        <p>
+          帳戶、委託、凍結、成交、交割、庫存、現金。登入者經 <strong>lib/paper-db.ts</strong> 寫入。
+          買進是進貨，已交割部位是存貨，賣出是銷貨。
+        </p>
+      </article>
+      <article class="word">
+        <span class="tag link">SCHEMA LINKING</span>
+        <h2>問句先對上四個槽</h2>
+        <p>
+          <strong>股票、交易日、方向、指標。</strong>
+          名稱用上市上櫃名冊對成代號。均價不帶日期與方向；「最新」改成該方向最近的交易日。
+        </p>
+      </article>
+      <article class="word">
+        <span class="tag sql">TEXT-TO-SQL</span>
+        <h2>套目錄裡的那條 SELECT</h2>
+        <p>
+          連結成功才查。使用者來自登入，問句不進 SQL。和目錄不同的語句仍改跑目錄。寫入維持帳本函式。
+        </p>
+      </article>
+    </section>
+
+    <section class="flow" aria-label="資金如何進出庫存">
+      <h2>一筆資金怎麼走完進銷存</h2>
+      <div class="steps">
+        <div class="step cash">
+          <b>資金</b>
+          <span>餘額只隨流水變</span>
+          <code>accounts · cash_entries</code>
+        </div>
+        <div class="step buy">
+          <b>進貨下單</b>
+          <span>凍結現金，餘額不動</span>
+          <code>orders · side=buy</code>
+        </div>
+        <div class="step buy">
+          <b>進貨在途</b>
+          <span>整張成交，尚未入庫</span>
+          <code>fills · settlements</code>
+        </div>
+        <div class="step stock">
+          <b>存貨</b>
+          <span>交割日才入庫</span>
+          <code>positions</code>
+        </div>
+        <div class="step sell">
+          <b>銷貨下單</b>
+          <span>只凍已入庫股數</span>
+          <code>orders · side=sell</code>
+        </div>
+        <div class="step sell">
+          <b>銷貨在途</b>
+          <span>淨收入尚未入帳</span>
+          <code>fills · settlements</code>
+        </div>
+        <div class="step cash">
+          <b>銷貨交割</b>
+          <span>現金入、存貨出</span>
+          <code>cash_entries</code>
+        </div>
+      </div>
+      <div class="notes">
+        <p class="note"><strong>可用現金</strong> = 餘額 − 還掛著的買單凍結 − 待交割買單。取消、到期，或成交價低於凍結，差額回到可用金額，不另寫一筆流水。</p>
+        <p class="note"><strong>可賣股數</strong> = 已交割股數 − 掛著的賣單 − 已成交未交割的賣單。同一批股票只佔其中一邊。</p>
+        <p class="note"><strong>交割日</strong>是成交交易日之後的第二個交易日。手續費是成交金額的 0.1425% 再打六折，最低 20 元。賣出另加證交稅。</p>
+      </div>
+    </section>
+
+    <section class="split">
+      <div class="panel">
+        <h2>六張表各自記什麼</h2>
+        <table>
+          <thead>
+            <tr><th>表</th><th>進銷存裡的角色</th><th>誰寫</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>paper_accounts</code></td>
+              <td>現金餘額，不能為負</td>
+              <td>開戶；流水觸發器改餘額</td>
+            </tr>
+            <tr>
+              <td><code>paper_orders</code></td>
+              <td>進貨單或銷貨單</td>
+              <td>下單、取消、收盤</td>
+            </tr>
+            <tr>
+              <td><code>paper_fills</code></td>
+              <td>驗收，一張委託一列</td>
+              <td>盤中或收盤撮合</td>
+            </tr>
+            <tr>
+              <td><code>paper_settlements</code></td>
+              <td>在途，待交割或已交割</td>
+              <td>成交插入，交割日改狀態</td>
+            </tr>
+            <tr>
+              <td><code>paper_positions</code></td>
+              <td>存貨，已交割股數與均價</td>
+              <td>交割入庫或出庫</td>
+            </tr>
+            <tr>
+              <td><code>paper_cash_entries</code></td>
+              <td>日記帳：開戶或交割</td>
+              <td>每張委託最多一筆</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="ask">
+          寫入只有 <code>open_paper_account</code>、<code>insert_paper_order</code>、<code>cancel_paper_order</code>、<code>apply_paper_close</code>。
+          拒絕的單不留。沒成交的舊單由 <code>purge_stale_paper_orders</code> 清掉。13:30 前算當日；09:00–13:30 用當下報價整張成交或續掛，之後改看收盤價。
+        </p>
+      </div>
+
+      <div class="panel">
+        <h2>問句怎麼讀到這三個數字</h2>
+        <p class="ask" style="margin-top: 0">
+          <code>POST /api/paper/ask</code> → <code>linkPaperQuestion</code> → 下面三條。成交價與限價要有股票、方向、交易日或「最新」。外資、融資、主力直接拒答。
+        </p>
+        <pre class="sql"><span class="c">-- fill_price  進貨／銷貨成交價</span>
+select fill_price_cents, shares, session_date from paper_fills
+where user_id=$1 and stock_id=$2 and session_date=$3 and side=$4
+
+<span class="c">-- limit_price  委託限價，已拒絕除外</span>
+select limit_price_cents, shares, session_date, order_type from paper_orders
+where user_id=$1 and stock_id=$2 and session_date=$3 and side=$4
+
+<span class="c">-- avg_cost  存貨均價，只有 $1 $2</span>
+select avg_cost_cents, settled_shares from paper_positions
+where user_id=$1 and stock_id=$2</pre>
+        <p class="ask">
+          「最新」改查該方向 <code>max(session_date)</code>。例：2026-10-30 台積電買進價格 → 2330、該日、buy、<code>fill_price</code>。現金與凍結讀 <code>GET /api/paper</code>。
+        </p>
+      </div>
+    </section>
+
+    <footer class="files">
+      <span>規則 <code>lib/paper-trade.ts</code> <code>paper-ledger.ts</code> <code>paper-live.ts</code></span>
+      <span>寫入 <code>lib/paper-db.ts</code> <code>supabase/schema.sql</code></span>
+      <span>盤中 <code>paper-session.ts</code> <code>POST /api/paper/tick</code></span>
+      <span>問句 <code>lib/paper-link.ts</code> <code>paper-link-query.ts</code></span>
+      <span>畫面 <code>PaperTradingDashboard.tsx</code> <code>PaperLedgerAsk.tsx</code></span>
+      <span>帳外：報告 CSV、真實持股 <code>holdings</code>、盤中每一筆報價</span>
+    </footer>
+  </article>
+</body>
+</html>

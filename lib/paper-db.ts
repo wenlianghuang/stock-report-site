@@ -15,6 +15,13 @@ export type SavedPaperOrder = {
   reserved_shares: number;
 };
 
+/** 刪掉交易日早於今天、且沒有成交的到期、取消、拒絕委託。 */
+export async function purgeStalePaperOrders(today: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("purge_stale_paper_orders", { p_today: today });
+  if (error) throw new Error(error.message);
+}
+
 export async function loadPaperBook(cashCents: number): Promise<PaperBook> {
   const supabase = await createClient();
   const [orders, settlements, positions] = await Promise.all([
