@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>模擬帳架構：資金、進貨、存貨、銷貨</title>
+  <title>交易帳戶架構：資金、進貨、存貨、銷貨</title>
   <style>
     :root {
       --ink: #1c1915;
@@ -23,9 +24,12 @@
       --shadow: 0 1px 0 rgba(28, 25, 21, 0.04);
     }
 
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
 
-    html, body {
+    html,
+    body {
       margin: 0;
       background: #ebe6de;
       color: var(--ink);
@@ -81,7 +85,9 @@
       line-height: 1.6;
     }
 
-    .meta a { color: var(--cash); }
+    .meta a {
+      color: var(--cash);
+    }
 
     h2 {
       margin: 0 0 8px;
@@ -105,8 +111,15 @@
       box-shadow: var(--shadow);
     }
 
-    .word p { margin: 0; color: var(--muted); }
-    .word strong { color: var(--ink); font-weight: 650; }
+    .word p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .word strong {
+      color: var(--ink);
+      font-weight: 650;
+    }
 
     .tag {
       display: inline-block;
@@ -118,9 +131,20 @@
       letter-spacing: 0.04em;
     }
 
-    .tag.erp { background: var(--stock-bg); color: var(--stock); }
-    .tag.link { background: var(--cash-bg); color: var(--cash); }
-    .tag.sql { background: var(--buy-bg); color: var(--buy); }
+    .tag.erp {
+      background: var(--stock-bg);
+      color: var(--stock);
+    }
+
+    .tag.link {
+      background: var(--cash-bg);
+      color: var(--cash);
+    }
+
+    .tag.sql {
+      background: var(--buy-bg);
+      color: var(--buy);
+    }
 
     .flow {
       margin-top: 10px;
@@ -172,10 +196,25 @@
       color: var(--ink);
     }
 
-    .cash { background: var(--cash-bg); color: var(--cash); }
-    .buy { background: var(--buy-bg); color: var(--buy); }
-    .stock { background: var(--stock-bg); color: var(--stock); }
-    .sell { background: var(--sell-bg); color: var(--sell); }
+    .cash {
+      background: var(--cash-bg);
+      color: var(--cash);
+    }
+
+    .buy {
+      background: var(--buy-bg);
+      color: var(--buy);
+    }
+
+    .stock {
+      background: var(--stock-bg);
+      color: var(--stock);
+    }
+
+    .sell {
+      background: var(--sell-bg);
+      color: var(--sell);
+    }
 
     .notes {
       display: grid;
@@ -193,7 +232,10 @@
       font-size: 12px;
     }
 
-    .note strong { color: var(--ink); font-weight: 650; }
+    .note strong {
+      color: var(--ink);
+      font-weight: 650;
+    }
 
     .split {
       display: grid;
@@ -208,7 +250,8 @@
       font-size: 12.5px;
     }
 
-    th, td {
+    th,
+    td {
       padding: 3px 5px;
       text-align: left;
       vertical-align: top;
@@ -222,7 +265,9 @@
       letter-spacing: 0.04em;
     }
 
-    td code, .sql code, .files code {
+    td code,
+    .sql code,
+    .files code {
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
       font-size: 11.5px;
     }
@@ -246,7 +291,9 @@
       overflow: auto;
     }
 
-    .sql .c { color: #b7aa96; }
+    .sql .c {
+      color: #b7aa96;
+    }
 
     .ask {
       margin: 6px 0 0;
@@ -265,16 +312,34 @@
       font-size: 11.5px;
     }
 
-    .files span { white-space: nowrap; }
+    .files span {
+      white-space: nowrap;
+    }
 
     @media (max-width: 980px) {
-      header, .words, .steps, .notes, .split { grid-template-columns: 1fr; }
-      .step:not(:last-child)::after { content: none; }
-      .meta { text-align: left; }
+
+      header,
+      .words,
+      .steps,
+      .notes,
+      .split {
+        grid-template-columns: 1fr;
+      }
+
+      .step:not(:last-child)::after {
+        content: none;
+      }
+
+      .meta {
+        text-align: left;
+      }
     }
 
     @media print {
-      body { background: white; }
+      body {
+        background: white;
+      }
+
       .sheet {
         width: auto;
         margin: 0;
@@ -283,19 +348,24 @@
         box-shadow: none;
         padding: 0;
       }
-      @page { size: A3 landscape; margin: 10mm; }
+
+      @page {
+        size: A3 landscape;
+        margin: 10mm;
+      }
     }
   </style>
 </head>
+
 <body>
   <article class="sheet">
     <header>
       <div>
         <p class="kicker">PAPER LEDGER · 給接手的開發者</p>
-        <h1>模擬帳怎麼把資金記成進貨、存貨、銷貨</h1>
+        <h1>交易帳戶怎麼把資金記成進貨、存貨、銷貨</h1>
         <p class="thesis">
           這本帳是登入使用者自己的進銷存。規則在純函式裡算完，資料庫只寫一次。
-          問句先連上股票、交易日、方向和指標，再執行目錄裡那條 SELECT。
+          問句先連上目錄裡的指標，再執行那條 SELECT。規則對不上時，本機模型只負責選目錄。
           籌碼、報告、真實持股留在帳外。
         </p>
       </div>
@@ -310,25 +380,25 @@
     <section class="words" aria-label="三個詞">
       <article class="word">
         <span class="tag erp">ERP</span>
-        <h2>自己產生的帳</h2>
+        <h2>個體產生的帳戶</h2>
         <p>
-          帳戶、委託、凍結、成交、交割、庫存、現金。登入者經 <strong>lib/paper-db.ts</strong> 寫入。
+          帳戶、委託、凍結、成交、交割、庫存、現金。登入者經 <strong>執行規則</strong> 寫入。
           買進是進貨，已交割部位是存貨，賣出是銷貨。
         </p>
       </article>
       <article class="word">
         <span class="tag link">SCHEMA LINKING</span>
-        <h2>問句先對上四個槽</h2>
+        <h2>先把問句拆成查詢條件</h2>
         <p>
-          <strong>股票、交易日、方向、指標。</strong>
-          名稱用上市上櫃名冊對成代號。均價不帶日期與方向；「最新」改成該方向最近的交易日。
+          <strong>股票、交易日或月份、方向、指標。</strong>
+          名稱用上市上櫃名冊對成代號。某月成交可以不限股票；沒指定股票的最近一筆只取一檔。
         </p>
       </article>
       <article class="word">
         <span class="tag sql">TEXT-TO-SQL</span>
-        <h2>套目錄裡的那條 SELECT</h2>
+        <h2>再用寫好的查詢去讀</h2>
         <p>
-          連結成功才查。使用者來自登入，問句不進 SQL。和目錄不同的語句仍改跑目錄。寫入維持帳本函式。
+          先跑規則。對不上、又不是已判定的拒答，改請本機 Ollama 選同一份目錄。模型只回 JSON 連結，不寫 SQL，也看不到帳。
         </p>
       </article>
     </section>
@@ -347,7 +417,7 @@
           <code>orders · side=buy</code>
         </div>
         <div class="step buy">
-          <b>進貨在途</b>
+          <b>進貨成交</b>
           <span>整張成交，尚未入庫</span>
           <code>fills · settlements</code>
         </div>
@@ -362,7 +432,7 @@
           <code>orders · side=sell</code>
         </div>
         <div class="step sell">
-          <b>銷貨在途</b>
+          <b>銷貨成交</b>
           <span>淨收入尚未入帳</span>
           <code>fills · settlements</code>
         </div>
@@ -381,10 +451,14 @@
 
     <section class="split">
       <div class="panel">
-        <h2>六張表各自記什麼</h2>
+        <h2>六張表各自記錄得是什麼</h2>
         <table>
           <thead>
-            <tr><th>表</th><th>進銷存裡的角色</th><th>誰寫</th></tr>
+            <tr>
+              <th>表</th>
+              <th>進銷存裡的角色</th>
+              <th>誰寫</th>
+            </tr>
           </thead>
           <tbody>
             <tr>
@@ -420,29 +494,55 @@
           </tbody>
         </table>
         <p class="ask">
-          寫入只有 <code>open_paper_account</code>、<code>insert_paper_order</code>、<code>cancel_paper_order</code>、<code>apply_paper_close</code>。
+          寫入只有
+          <code>open_paper_account</code>、<code>insert_paper_order</code>、<code>cancel_paper_order</code>、<code>apply_paper_close</code>。
           拒絕的單不留。沒成交的舊單由 <code>purge_stale_paper_orders</code> 清掉。13:30 前算當日；09:00–13:30 用當下報價整張成交或續掛，之後改看收盤價。
         </p>
       </div>
 
       <div class="panel">
-        <h2>問句怎麼讀到這三個數字</h2>
-        <p class="ask" style="margin-top: 0">
-          <code>POST /api/paper/ask</code> → <code>linkPaperQuestion</code> → 下面三條。成交價與限價要有股票、方向、交易日或「最新」。外資、融資、主力直接拒答。
-        </p>
-        <pre class="sql"><span class="c">-- fill_price  進貨／銷貨成交價</span>
-select fill_price_cents, shares, session_date from paper_fills
-where user_id=$1 and stock_id=$2 and session_date=$3 and side=$4
-
-<span class="c">-- limit_price  委託限價，已拒絕除外</span>
-select limit_price_cents, shares, session_date, order_type from paper_orders
-where user_id=$1 and stock_id=$2 and session_date=$3 and side=$4
-
-<span class="c">-- avg_cost  存貨均價，只有 $1 $2</span>
-select avg_cost_cents, settled_shares from paper_positions
-where user_id=$1 and stock_id=$2</pre>
+        <h2>五種問法各自讀了什麼</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>指標</th>
+              <th>讀到什麼</th>
+              <th>條件</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>fill_price</code></td>
+              <td>該檔當日或最近成交價</td>
+              <td>使用者、股票、交易日、方向</td>
+            </tr>
+            <tr>
+              <td><code>limit_price</code></td>
+              <td>委託限價，已拒絕除外</td>
+              <td>同上，讀 <code>paper_orders</code></td>
+            </tr>
+            <tr>
+              <td><code>avg_cost</code></td>
+              <td>目前存貨均價</td>
+              <td>使用者、股票</td>
+            </tr>
+            <tr>
+              <td><code>month_fills</code></td>
+              <td>某月成交，逐筆列出</td>
+              <td>使用者、方向、月初到月底；可再加股票</td>
+            </tr>
+            <tr>
+              <td><code>latest_fill</code></td>
+              <td>不限股票的最近一筆成交</td>
+              <td>使用者、方向，取最近一筆</td>
+            </tr>
+          </tbody>
+        </table>
         <p class="ask">
-          「最新」改查該方向 <code>max(session_date)</code>。例：2026-10-30 台積電買進價格 → 2330、該日、buy、<code>fill_price</code>。現金與凍結讀 <code>GET /api/paper</code>。
+          <code>POST /api/paper/ask</code> 先走
+          <code>linkPaperQuestion</code>。年月先從問句拿掉，避免把年份當成代號。「2026年10月有沒有買進」是整月成交；「最新買的是哪一檔」是
+          <code>latest_fill</code>。指定了股票的「最新」仍是該檔最近一個交易日。「這個月」由模型用台北今天的年月補上。籌碼、兩個日期、名稱和代號對不上，不再問模型。現金與凍結讀
+          <code>GET /api/paper</code>。
         </p>
       </div>
     </section>
@@ -451,10 +551,11 @@ where user_id=$1 and stock_id=$2</pre>
       <span>規則 <code>lib/paper-trade.ts</code> <code>paper-ledger.ts</code> <code>paper-live.ts</code></span>
       <span>寫入 <code>lib/paper-db.ts</code> <code>supabase/schema.sql</code></span>
       <span>盤中 <code>paper-session.ts</code> <code>POST /api/paper/tick</code></span>
-      <span>問句 <code>lib/paper-link.ts</code> <code>paper-link-query.ts</code></span>
+      <span>問句 <code>lib/paper-link.ts</code> <code>paper-link-query.ts</code> <code>paper-ollama-link.ts</code></span>
       <span>畫面 <code>PaperTradingDashboard.tsx</code> <code>PaperLedgerAsk.tsx</code></span>
       <span>帳外：報告 CSV、真實持股 <code>holdings</code>、盤中每一筆報價</span>
     </footer>
   </article>
 </body>
+
 </html>
