@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   admitProposedSql,
+  canRetryLinkWithModel,
   catalogSql,
   formatPaperAnswer,
+  linkFromModelDraft,
   linkPaperQuestion,
+  parseModelLinkDraft,
   type PaperLink,
 } from "./paper-link";
 
@@ -191,6 +194,48 @@ describe("paper ledger linking", () => {
     expect(linked).toEqual({ ok: false, reason: "問句裡有兩個日期" });
   });
 
+  it("links the latest buy when the stock is the question", async () => {
+    const linked = await linkPaperQuestion("那最新買的股票是哪一檔? $", resolveStockId);
+    expect(linked).toEqual({
+      ok: true,
+      link: {
+        stockId: null,
+        sessionDate: null,
+        side: "buy",
+        metric: "latest_fill",
+        when: "latest",
+      },
+    });
+    const sql = catalogSql("latest_fill");
+    expect(sql).toContain("paper_fills");
+    expect(sql).toContain("side = $2");
+    expect(sql).toContain("limit 1");
+    expect(sql).not.toContain("stock_id =");
+  });
+
+  it("links the latest sell the same way", async () => {
+    const linked = await linkPaperQuestion("最近賣的是哪一檔", resolveStockId);
+    expect(linked.ok).toBe(true);
+    if (!linked.ok) return;
+    expect(linked.link).toMatchObject({ side: "sell", metric: "latest_fill", stockId: null });
+  });
+
+  it("keeps a named latest buy on the price catalog", async () => {
+    const linked = await linkPaperQuestion("最新買的台積電", resolveStockId);
+    expect(linked).toEqual({
+      ok: false,
+      reason: "要說明是成交價、限價，還是目前的均價",
+    });
+  });
+
+  it("refuses asking which stock while also naming one", async () => {
+    const linked = await linkPaperQuestion("最新買的台積電是哪一檔", resolveStockId);
+    expect(linked).toEqual({
+      ok: false,
+      reason: "要查哪一檔，就不要再寫股票名稱或代號",
+    });
+  });
+
   it("still requires a session date when the month question asks for a fill price", async () => {
     const linked = await linkPaperQuestion("2026年10月台積電買進成交價", resolveStockId);
     expect(linked).toEqual({
@@ -211,6 +256,8 @@ describe("paper ledger linking", () => {
     expect(admitProposedSql(catalogSql("month_fills", null, true), "month_fills", null, true)).toBe(true);
     expect(admitProposedSql(catalogSql("month_fills"), "month_fills", null, true)).toBe(false);
     expect(admitProposedSql(catalogSql("month_fills"), "fill_price")).toBe(false);
+    expect(admitProposedSql(catalogSql("latest_fill"), "latest_fill")).toBe(true);
+    expect(admitProposedSql(catalogSql("latest_fill"), "fill_price", "latest")).toBe(false);
   });
 });
 
@@ -314,6 +361,47 @@ describe("paper ledger answers", () => {
     expect(answer).not.toContain("950.00");
   });
 
+  it("names the latest buy", () => {
+    expect(
+      formatPaperAnswer({
+        link: {
+          stockId: null,
+          sessionDate: null,
+          side: "buy",
+          metric: "latest_fill",
+          when: "latest",
+        },
+        stockName: null,
+        stockNames: { "2330": "台積電" },
+        rows: [
+          {
+            kind: "fill_price",
+            fillPriceCents: 100_000,
+            shares: 1000,
+            sessionDate: "2026-10-30",
+            stockId: "2330",
+          },
+        ],
+      }),
+    ).toBe("最近一筆買進是 2026-10-30 台積電（2330），成交價 1,000.00 元，1000 股。");
+  });
+
+  it("says when there is no buy at all", () => {
+    expect(
+      formatPaperAnswer({
+        link: {
+          stockId: null,
+          sessionDate: null,
+          side: "buy",
+          metric: "latest_fill",
+          when: "latest",
+        },
+        stockName: null,
+        rows: [],
+      }),
+    ).toBe("沒有買進成交。");
+  });
+
   it("says when that month has no buy", () => {
     expect(
       formatPaperAnswer({
@@ -330,5 +418,89 @@ describe("paper ledger answers", () => {
         rows: [],
       }),
     ).toBe("2026年10月沒有買進成交。");
+  });
+});
+
+describe("model catalog link", () => {
+  it("accepts a latest buy chosen by the model", async () => {
+    const linked = await linkFromModelDraft(
+      {
+        metric: "latest_fill",
+        side: "buy",
+        stockName: null,
+        sessionDate: null,
+        year: null,
+        month: null,
+        when: "latest",
+      },
+      resolveStockId,
+    );
+    expect(linked).toEqual({
+      ok: true,
+      link: {
+        stockId: null,
+        sessionDate: null,
+        side: "buy",
+        metric: "latest_fill",
+        when: "latest",
+      },
+    });
+  });
+
+  it("turns this month into November 2026 bounds", async () => {
+    const linked = await linkFromModelDraft(
+      {
+        metric: "month_fills",
+        side: "買進",
+        stockName: "任何",
+        year: "2026",
+        month: 11,
+      },
+      resolveStockId,
+    );
+    expect(linked).toEqual({
+      ok: true,
+      link: {
+        stockId: null,
+        sessionDate: null,
+        side: "buy",
+        metric: "month_fills",
+        when: null,
+        fromDate: "2026-11-01",
+        toDate: "2026-11-30",
+      },
+    });
+  });
+
+  it("resolves a stock name instead of trusting a guessed code", async () => {
+    const linked = await linkFromModelDraft(
+      { metric: "avg_cost", side: null, stockName: "台積電" },
+      resolveStockId,
+    );
+    expect(linked.ok).toBe(true);
+    if (!linked.ok) return;
+    expect(linked.link).toMatchObject({ metric: "avg_cost", stockId: "2330" });
+  });
+
+  it("refuses a stock name that is not on the registry", async () => {
+    const linked = await linkFromModelDraft(
+      { metric: "avg_cost", stockName: "不存在公司" },
+      resolveStockId,
+    );
+    expect(linked).toEqual({ ok: false, reason: "要說明股票名稱或代號" });
+  });
+
+  it("does not ask the model to override a chip refusal", () => {
+    expect(canRetryLinkWithModel("這本模擬帳沒有籌碼欄位", "台積電外資")).toBe(false);
+    expect(canRetryLinkWithModel("要說明是成交價、限價，還是目前的均價", "這個月有沒有買任何股票")).toBe(
+      true,
+    );
+    expect(canRetryLinkWithModel("要說明是買進還是賣出", "買進還是賣出")).toBe(false);
+  });
+
+  it("parses a fenced JSON object", () => {
+    expect(
+      parseModelLinkDraft('```json\n{"metric":"latest_fill","side":"buy"}\n```'),
+    ).toMatchObject({ metric: "latest_fill", side: "buy" });
   });
 });

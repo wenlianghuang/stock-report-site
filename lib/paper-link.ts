@@ -5,12 +5,12 @@
 
 import { formatTwdFromCents, type PaperSide } from "@/lib/paper-trade";
 
-export type PaperMetric = "fill_price" | "limit_price" | "avg_cost" | "month_fills";
+export type PaperMetric = "fill_price" | "limit_price" | "avg_cost" | "month_fills" | "latest_fill";
 
 /** session 用問句裡的交易日。latest 用該方向最近一個有紀錄的交易日。 */
 export type PaperWhen = "session" | "latest";
 
-type PointMetric = Exclude<PaperMetric, "month_fills">;
+type PointMetric = Exclude<PaperMetric, "month_fills" | "latest_fill">;
 
 export type PaperPointLink = {
   stockId: string;
@@ -31,7 +31,16 @@ export type PaperMonthLink = {
   toDate: string;
 };
 
-export type PaperLink = PaperPointLink | PaperMonthLink;
+/** 不限股票，取該方向最近一筆成交。 */
+export type PaperLatestFillLink = {
+  stockId: null;
+  sessionDate: null;
+  side: PaperSide;
+  metric: "latest_fill";
+  when: "latest";
+};
+
+export type PaperLink = PaperPointLink | PaperMonthLink | PaperLatestFillLink;
 
 export type PaperLinkResult =
   | { ok: true; link: PaperLink }
@@ -76,6 +85,13 @@ where user_id = $1
   and session_date <= $4
   and stock_id = $5`;
 
+const LATEST_ANY_FILL_SQL = `select stock_id, fill_price_cents, shares, session_date
+from paper_fills
+where user_id = $1
+  and side = $2
+order by session_date desc, created_at desc
+limit 1`;
+
 const LATEST_SQL: Partial<Record<PointMetric, string>> = {
   fill_price: `select fill_price_cents, shares, session_date
 from paper_fills
@@ -114,6 +130,7 @@ export function catalogSql(
   forStock = false,
 ): string {
   if (metric === "month_fills") return forStock ? MONTH_FILL_STOCK_SQL : MONTH_FILL_SQL;
+  if (metric === "latest_fill") return LATEST_ANY_FILL_SQL;
   if (when === "latest") return LATEST_SQL[metric] ?? SQL_BY_METRIC[metric];
   return SQL_BY_METRIC[metric];
 }
@@ -153,6 +170,10 @@ export async function linkPaperQuestion(
   }
   if (!metric && months.months.length === 1) {
     return linkMonthFills(text, months.months[0], resolveStockId);
+  }
+  if (!metric && dates.length === 0 && /最新|最近/.test(text)) {
+    const latest = await linkLatestAnyFill(text, resolveStockId);
+    if (latest) return latest;
   }
   if (!metric) {
     return { ok: false, reason: "要說明是成交價、限價，還是目前的均價" };
@@ -227,6 +248,9 @@ export function formatPaperAnswer(input: {
 }): string {
   if (input.link.metric === "month_fills") {
     return formatMonthFills(input.link, input.rows, input.stockName, input.stockNames ?? {});
+  }
+  if (input.link.metric === "latest_fill") {
+    return formatLatestFill(input.link, input.rows, input.stockNames ?? {});
   }
 
   const stock = stockLabel(input.link.stockId, input.stockName);
@@ -307,6 +331,50 @@ async function linkMonthFills(
       toDate: bounds.toDate,
     },
   };
+}
+
+async function linkLatestAnyFill(
+  text: string,
+  resolveStockId: StockIdResolver,
+): Promise<PaperLinkResult | null> {
+  const side = detectSide(text);
+  if (side === "both" || !side) return { ok: false, reason: "要說明是買進還是賣出" };
+
+  const coded = extractStockCode(text);
+  if (coded === "ambiguous") return { ok: false, reason: "問句裡有兩個股票代號" };
+  const named = await resolveStockId(text);
+  if (coded && named && coded !== named) {
+    return { ok: false, reason: "股票名稱和代號對不上" };
+  }
+  const stockId = coded ?? named;
+  const asksWhich = /哪一?[檔档支隻]|什麼/.test(text);
+  if (stockId && asksWhich) {
+    return { ok: false, reason: "要查哪一檔，就不要再寫股票名稱或代號" };
+  }
+  if (stockId) return null;
+
+  return {
+    ok: true,
+    link: {
+      stockId: null,
+      sessionDate: null,
+      side,
+      metric: "latest_fill",
+      when: "latest",
+    },
+  };
+}
+
+function formatLatestFill(
+  link: PaperLatestFillLink,
+  rows: PaperFact[],
+  stockNames: Record<string, string | null>,
+): string {
+  const side = link.side === "sell" ? "賣出" : "買進";
+  const fill = rows.find((item) => item.kind === "fill_price");
+  if (!fill || fill.kind !== "fill_price" || !fill.stockId) return `沒有${side}成交。`;
+  const stock = stockLabel(fill.stockId, stockNames[fill.stockId] ?? null);
+  return `最近一筆${side}是 ${fill.sessionDate} ${stock}，成交價 ${yuan(fill.fillPriceCents)} 元，${fill.shares} 股。`;
 }
 
 function formatMonthFills(
@@ -427,6 +495,201 @@ function normalizeSql(sql: string): string {
 
 function stockLabel(stockId: string, stockName: string | null): string {
   return stockName ? `${stockName}（${stockId}）` : stockId;
+}
+
+const FINAL_LINK_REASONS = new Set([
+  "要有問句",
+  "這本模擬帳沒有籌碼欄位",
+  "問句裡有兩個日期",
+  "日期不對",
+  "均價是目前已交割部位，沒有某一個交易日。要查那天的價格，請問成交價",
+  "要查最新一筆，就不要再寫交易日",
+  "股票名稱和代號對不上",
+  "要查全部股票，就不要再寫股票名稱或代號",
+  "要查哪一檔，就不要再寫股票名稱或代號",
+  "問句裡有兩個股票代號",
+]);
+
+const MODEL_METRICS = new Set<PaperMetric>([
+  "fill_price",
+  "limit_price",
+  "avg_cost",
+  "month_fills",
+  "latest_fill",
+]);
+
+export type ModelLinkDraft = {
+  metric?: unknown;
+  side?: unknown;
+  stockName?: unknown;
+  sessionDate?: unknown;
+  year?: unknown;
+  month?: unknown;
+  when?: unknown;
+};
+
+/** 規則已經判成衝突或越界時，不再交給模型重選。 */
+export function canRetryLinkWithModel(reason: string, question: string): boolean {
+  if (FINAL_LINK_REASONS.has(reason)) return false;
+  if (reason === "要說明是買進還是賣出" && /買/.test(question) && /賣/.test(question)) return false;
+  return true;
+}
+
+export function parseModelLinkDraft(raw: string): ModelLinkDraft | null {
+  const stripped = raw.replace(/```(?:json)?/gi, "").trim();
+  const start = stripped.indexOf("{");
+  const end = stripped.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try {
+    const value = JSON.parse(stripped.slice(start, end + 1)) as unknown;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    return value as ModelLinkDraft;
+  } catch {
+    return null;
+  }
+}
+
+export async function linkFromModelDraft(
+  draft: ModelLinkDraft,
+  resolveStockId: StockIdResolver,
+): Promise<PaperLinkResult> {
+  const metric = readMetric(draft.metric);
+  if (!metric) return { ok: false, reason: "要說明是成交價、限價，還是目前的均價" };
+
+  const side = readModelSide(draft.side);
+  if (side === "bad") return { ok: false, reason: "要說明是買進還是賣出" };
+
+  const stock = await readModelStock(draft.stockName, resolveStockId);
+  if (stock === "mismatch") return { ok: false, reason: "股票名稱和代號對不上" };
+  if (stock === "bad") return { ok: false, reason: "要說明股票名稱或代號" };
+
+  const sessionDate = readModelDate(draft.sessionDate);
+  if (sessionDate === "bad") return { ok: false, reason: "日期不對" };
+
+  const year = readModelInt(draft.year);
+  const month = readModelInt(draft.month);
+  if (draft.year != null && draft.year !== "" && year == null) return { ok: false, reason: "日期不對" };
+  if (draft.month != null && draft.month !== "" && month == null) return { ok: false, reason: "日期不對" };
+  if (month != null && (month < 1 || month > 12)) return { ok: false, reason: "日期不對" };
+  if (year != null && (year < 1990 || year > 2100)) return { ok: false, reason: "日期不對" };
+
+  const wantsLatest = readModelWhen(draft.when) === "latest";
+
+  if (metric === "latest_fill") {
+    if (!side) return { ok: false, reason: "要說明是買進還是賣出" };
+    if (typeof stock === "string") {
+      return {
+        ok: true,
+        link: { stockId: stock, sessionDate: null, side, metric: "fill_price", when: "latest" },
+      };
+    }
+    return {
+      ok: true,
+      link: { stockId: null, sessionDate: null, side, metric: "latest_fill", when: "latest" },
+    };
+  }
+
+  if (metric === "month_fills") {
+    if (!side) return { ok: false, reason: "要說明是買進還是賣出" };
+    if (year == null || month == null) {
+      return { ok: false, reason: "要有交易日，例如 2026-10-30。要查最近一筆，可以說最新" };
+    }
+    if (sessionDate) return { ok: false, reason: "問句裡有兩個日期" };
+    const bounds = monthBounds(year, month);
+    return {
+      ok: true,
+      link: {
+        stockId: stock,
+        sessionDate: null,
+        side,
+        metric: "month_fills",
+        when: null,
+        fromDate: bounds.fromDate,
+        toDate: bounds.toDate,
+      },
+    };
+  }
+
+  if (metric === "avg_cost") {
+    if (sessionDate || year != null || month != null) {
+      return { ok: false, reason: "均價是目前已交割部位，沒有某一個交易日。要查那天的價格，請問成交價" };
+    }
+    if (stock == null) return { ok: false, reason: "要說明股票名稱或代號" };
+    return {
+      ok: true,
+      link: { stockId: stock, sessionDate: null, side: null, metric: "avg_cost", when: null },
+    };
+  }
+
+  if (!side) return { ok: false, reason: "要說明是買進還是賣出" };
+  if (stock == null) return { ok: false, reason: "要說明股票名稱或代號" };
+  if (wantsLatest && sessionDate) return { ok: false, reason: "要查最新一筆，就不要再寫交易日" };
+  if (!sessionDate && !wantsLatest) {
+    return { ok: false, reason: "要有交易日，例如 2026-10-30。要查最近一筆，可以說最新" };
+  }
+  return {
+    ok: true,
+    link: {
+      stockId: stock,
+      sessionDate: wantsLatest ? null : sessionDate,
+      side,
+      metric,
+      when: wantsLatest ? "latest" : "session",
+    },
+  };
+}
+
+function readMetric(value: unknown): PaperMetric | null {
+  if (typeof value !== "string") return null;
+  const metric = value.trim();
+  if (!MODEL_METRICS.has(metric as PaperMetric)) return null;
+  return metric as PaperMetric;
+}
+
+function readModelSide(value: unknown): PaperSide | null | "bad" {
+  if (value == null || value === "") return null;
+  if (typeof value !== "string") return "bad";
+  const text = value.trim().toLowerCase();
+  if (text === "null") return null;
+  if (text === "buy" || text === "買" || text === "買進") return "buy";
+  if (text === "sell" || text === "賣" || text === "賣出") return "sell";
+  return "bad";
+}
+
+async function readModelStock(
+  value: unknown,
+  resolveStockId: StockIdResolver,
+): Promise<string | null | "bad" | "mismatch"> {
+  if (value == null || value === "") return null;
+  const text = String(value).trim();
+  if (!text || text === "null" || /^(任何|全部|所有)$/.test(text)) return null;
+  const coded = extractStockCode(text);
+  if (coded === "ambiguous") return "mismatch";
+  const named = await resolveStockId(text);
+  if (coded && named && coded !== named) return "mismatch";
+  const stockId = coded ?? named;
+  return stockId ?? "bad";
+}
+
+function readModelDate(value: unknown): string | null | "bad" {
+  if (value == null || value === "" || value === "null") return null;
+  if (typeof value !== "string" || !isIsoDate(value.trim())) return "bad";
+  return value.trim();
+}
+
+function readModelInt(value: unknown): number | null {
+  if (value == null || value === "" || value === "null") return null;
+  const number = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(number)) return null;
+  return number;
+}
+
+function readModelWhen(value: unknown): PaperWhen | null {
+  if (typeof value !== "string") return null;
+  const text = value.trim().toLowerCase();
+  if (text === "latest" || text === "最近" || text === "最新") return "latest";
+  if (text === "session") return "session";
+  return null;
 }
 
 function yuan(cents: number): string {
