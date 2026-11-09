@@ -9,11 +9,13 @@ type AskPayload = {
   note?: string | null;
   error?: string;
   link?: {
-    stockId: string;
+    stockId: string | null;
     sessionDate: string | null;
     side: string | null;
     metric: string;
     when?: string | null;
+    fromDate?: string;
+    toDate?: string;
   };
 };
 
@@ -21,6 +23,7 @@ const METRIC_LABEL: Record<string, string> = {
   fill_price: "成交價",
   limit_price: "限價",
   avg_cost: "均價",
+  month_fills: "成交",
 };
 
 export function PaperLedgerAsk() {
@@ -58,7 +61,7 @@ export function PaperLedgerAsk() {
     <section className="rounded-2xl border border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-950">
       <h3 className="text-lg font-semibold">查這本帳</h3>
       <p className="mt-1 text-sm text-zinc-500">
-        只讀模擬帳的成交價、限價或已交割均價。問句不會拼進 SQL，也不能下單。
+        只讀模擬帳的成交價、限價、已交割均價，或某個月的買進與賣出成交。問句不會拼進 SQL，也不能下單。
       </p>
       <form onSubmit={(event) => void onSubmit(event)} className="mt-3 flex flex-col gap-2 sm:flex-row">
         <label className="sr-only" htmlFor="paper-ledger-question">
@@ -85,8 +88,9 @@ export function PaperLedgerAsk() {
             <p className="text-xs text-zinc-500">
               {METRIC_LABEL[link.metric] ?? link.metric}
               {" · "}
-              {link.stockId}
+              {link.stockId ?? "全部股票"}
               {link.when === "latest" ? " · 最近一個交易日" : ""}
+              {link.fromDate && link.toDate ? ` · ${link.fromDate} 至 ${link.toDate}` : ""}
               {link.sessionDate ? ` · ${link.sessionDate}` : ""}
               {link.side === "buy" ? " · 買進" : link.side === "sell" ? " · 賣出" : ""}
             </p>

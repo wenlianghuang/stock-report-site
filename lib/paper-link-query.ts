@@ -28,20 +28,22 @@ export async function askPaperLedger(question: string, proposedSql?: string): Pr
   const linked = await linkPaperQuestion(question, resolveStockIdFromText);
   if (!linked.ok) return { ok: false, answer: linked.reason };
 
+  const forStock = linked.link.metric === "month_fills" && linked.link.stockId != null;
   const note =
     proposedSql == null || proposedSql.trim() === ""
       ? null
-      : admitProposedSql(proposedSql, linked.link.metric, linked.link.when)
+      : admitProposedSql(proposedSql, linked.link.metric, linked.link.when, forStock)
         ? null
         : "提出的 SQL 與這條指標的目錄語句不一致，已改執行目錄裡的語句。";
 
   const userId = await currentUserId();
   const rows = await readFacts(linked.link, userId);
-  const stockName = await resolveStockNameById(linked.link.stockId);
+  const stockNames = await namesFor(linked.link, rows);
+  const stockName = linked.link.stockId ? (stockNames[linked.link.stockId] ?? null) : null;
   return {
     ok: true,
-    answer: formatPaperAnswer({ link: linked.link, stockName, rows }),
-    sql: catalogSql(linked.link.metric, linked.link.when),
+    answer: formatPaperAnswer({ link: linked.link, stockName, stockNames, rows }),
+    sql: catalogSql(linked.link.metric, linked.link.when, forStock),
     link: linked.link,
     note,
   };
@@ -55,8 +57,47 @@ async function currentUserId(): Promise<string> {
   return id;
 }
 
+async function namesFor(link: PaperLink, rows: PaperFact[]): Promise<Record<string, string | null>> {
+  const ids = new Set<string>();
+  if (link.stockId) ids.add(link.stockId);
+  if (link.metric === "month_fills") {
+    for (const row of rows) {
+      if (row.kind === "fill_price" && row.stockId) ids.add(row.stockId);
+    }
+  }
+  const names: Record<string, string | null> = {};
+  await Promise.all(
+    [...ids].map(async (id) => {
+      names[id] = await resolveStockNameById(id);
+    }),
+  );
+  return names;
+}
+
 async function readFacts(link: PaperLink, userId: string): Promise<PaperFact[]> {
   const supabase = await createClient();
+  if (link.metric === "month_fills") {
+    let query = supabase
+      .from("paper_fills")
+      .select("stock_id, fill_price_cents, shares, session_date, created_at")
+      .eq("user_id", userId)
+      .eq("side", link.side)
+      .gte("session_date", link.fromDate)
+      .lte("session_date", link.toDate)
+      .order("session_date", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (link.stockId) query = query.eq("stock_id", link.stockId);
+    const { data, error } = await query;
+    if (error) throw new PaperActionError(error.message, 500);
+    return (data ?? []).map((row) => ({
+      kind: "fill_price" as const,
+      fillPriceCents: asInt(row.fill_price_cents),
+      shares: asInt(row.shares),
+      sessionDate: String(row.session_date),
+      stockId: String(row.stock_id),
+    }));
+  }
+
   if (link.metric === "fill_price") {
     const sessionDate = await sessionOn(link, userId, "paper_fills");
     if (!sessionDate) return [];

@@ -5,18 +5,33 @@
 
 import { formatTwdFromCents, type PaperSide } from "@/lib/paper-trade";
 
-export type PaperMetric = "fill_price" | "limit_price" | "avg_cost";
+export type PaperMetric = "fill_price" | "limit_price" | "avg_cost" | "month_fills";
 
 /** session 用問句裡的交易日。latest 用該方向最近一個有紀錄的交易日。 */
 export type PaperWhen = "session" | "latest";
 
-export type PaperLink = {
+type PointMetric = Exclude<PaperMetric, "month_fills">;
+
+export type PaperPointLink = {
   stockId: string;
   sessionDate: string | null;
   side: PaperSide | null;
-  metric: PaperMetric;
+  metric: PointMetric;
   when: PaperWhen | null;
 };
+
+/** 某一個月的成交。stockId 空著代表不限股票。 */
+export type PaperMonthLink = {
+  stockId: string | null;
+  sessionDate: null;
+  side: PaperSide;
+  metric: "month_fills";
+  when: null;
+  fromDate: string;
+  toDate: string;
+};
+
+export type PaperLink = PaperPointLink | PaperMonthLink;
 
 export type PaperLinkResult =
   | { ok: true; link: PaperLink }
@@ -26,7 +41,7 @@ export type StockIdResolver = (text: string) => string | null | Promise<string |
 
 const OUTSIDE_LEDGER = /外資|投信|自營|主力|融資|融券|借券|當沖|買超|賣超/;
 
-const SQL_BY_METRIC: Record<PaperMetric, string> = {
+const SQL_BY_METRIC: Record<PointMetric, string> = {
   fill_price: `select fill_price_cents, shares, session_date
 from paper_fills
 where user_id = $1
@@ -46,7 +61,22 @@ where user_id = $1
   and stock_id = $2`,
 };
 
-const LATEST_SQL: Partial<Record<PaperMetric, string>> = {
+const MONTH_FILL_SQL = `select stock_id, fill_price_cents, shares, session_date
+from paper_fills
+where user_id = $1
+  and side = $2
+  and session_date >= $3
+  and session_date <= $4`;
+
+const MONTH_FILL_STOCK_SQL = `select stock_id, fill_price_cents, shares, session_date
+from paper_fills
+where user_id = $1
+  and side = $2
+  and session_date >= $3
+  and session_date <= $4
+  and stock_id = $5`;
+
+const LATEST_SQL: Partial<Record<PointMetric, string>> = {
   fill_price: `select fill_price_cents, shares, session_date
 from paper_fills
 where user_id = $1
@@ -78,7 +108,12 @@ where user_id = $1
 const FORBIDDEN_SQL =
   /\b(insert|update|delete|drop|alter|truncate|grant|revoke|copy|execute|call|union)\b/i;
 
-export function catalogSql(metric: PaperMetric, when: PaperWhen | null = "session"): string {
+export function catalogSql(
+  metric: PaperMetric,
+  when: PaperWhen | null = "session",
+  forStock = false,
+): string {
+  if (metric === "month_fills") return forStock ? MONTH_FILL_STOCK_SQL : MONTH_FILL_SQL;
   if (when === "latest") return LATEST_SQL[metric] ?? SQL_BY_METRIC[metric];
   return SQL_BY_METRIC[metric];
 }
@@ -87,11 +122,12 @@ export function admitProposedSql(
   proposed: string,
   metric: PaperMetric,
   when: PaperWhen | null = "session",
+  forStock = false,
 ): boolean {
   const normalized = normalizeSql(proposed);
   if (!normalized || normalized.includes(";")) return false;
   if (FORBIDDEN_SQL.test(proposed)) return false;
-  return normalized === normalizeSql(catalogSql(metric, when));
+  return normalized === normalizeSql(catalogSql(metric, when, forStock));
 }
 
 export async function linkPaperQuestion(
@@ -108,12 +144,20 @@ export async function linkPaperQuestion(
   if (metric === "ambiguous") {
     return { ok: false, reason: "要說明是成交價、限價，還是目前的均價" };
   }
+
+  const dates = extractDates(text);
+  const months = extractYearMonths(text);
+  if (!months.ok) return { ok: false, reason: "日期不對" };
+  if (dates.length + months.months.length > 1) {
+    return { ok: false, reason: "問句裡有兩個日期" };
+  }
+  if (!metric && months.months.length === 1) {
+    return linkMonthFills(text, months.months[0], resolveStockId);
+  }
   if (!metric) {
     return { ok: false, reason: "要說明是成交價、限價，還是目前的均價" };
   }
 
-  const dates = extractDates(text);
-  if (dates.length > 1) return { ok: false, reason: "問句裡有兩個日期" };
   const sessionDate = dates[0] ?? null;
   if (metric === "avg_cost" && sessionDate) {
     return { ok: false, reason: "均價是目前已交割部位，沒有某一個交易日。要查那天的價格，請問成交價" };
@@ -156,6 +200,7 @@ export type PaperFillFact = {
   fillPriceCents: number;
   shares: number;
   sessionDate: string;
+  stockId?: string;
 };
 
 export type PaperLimitFact = {
@@ -177,8 +222,13 @@ export type PaperFact = PaperFillFact | PaperLimitFact | PaperAvgFact;
 export function formatPaperAnswer(input: {
   link: PaperLink;
   stockName: string | null;
+  stockNames?: Record<string, string | null>;
   rows: PaperFact[];
 }): string {
+  if (input.link.metric === "month_fills") {
+    return formatMonthFills(input.link, input.rows, input.stockName, input.stockNames ?? {});
+  }
+
   const stock = stockLabel(input.link.stockId, input.stockName);
   if (input.link.metric === "avg_cost") {
     const row = input.rows.find((item) => item.kind === "avg_cost");
@@ -224,7 +274,65 @@ export function formatPaperAnswer(input: {
   return `${day} ${stock}有 ${limits.length} 筆${side}委託：${parts.join("；")}。`;
 }
 
-function detectMetric(text: string): PaperMetric | "ambiguous" | null {
+async function linkMonthFills(
+  text: string,
+  month: { year: number; month: number },
+  resolveStockId: StockIdResolver,
+): Promise<PaperLinkResult> {
+  const side = detectSide(text);
+  if (side === "both" || !side) return { ok: false, reason: "要說明是買進還是賣出" };
+
+  const stripped = text.replace(/\d{4}\s*年\s*\d{1,2}\s*月/g, " ");
+  const coded = extractStockCode(stripped);
+  if (coded === "ambiguous") return { ok: false, reason: "問句裡有兩個股票代號" };
+  const named = await resolveStockId(stripped);
+  if (coded && named && coded !== named) {
+    return { ok: false, reason: "股票名稱和代號對不上" };
+  }
+  const stockId = coded ?? named;
+  if (stockId && /任何|全部|哪些|所有/.test(text)) {
+    return { ok: false, reason: "要查全部股票，就不要再寫股票名稱或代號" };
+  }
+
+  const bounds = monthBounds(month.year, month.month);
+  return {
+    ok: true,
+    link: {
+      stockId,
+      sessionDate: null,
+      side,
+      metric: "month_fills",
+      when: null,
+      fromDate: bounds.fromDate,
+      toDate: bounds.toDate,
+    },
+  };
+}
+
+function formatMonthFills(
+  link: PaperMonthLink,
+  rows: PaperFact[],
+  stockName: string | null,
+  stockNames: Record<string, string | null>,
+): string {
+  const fills = rows.filter((item) => item.kind === "fill_price");
+  const side = link.side === "sell" ? "賣出" : "買進";
+  const month = monthLabel(link.fromDate);
+  const stock = link.stockId ? stockLabel(link.stockId, stockName) : null;
+  if (fills.length === 0) {
+    return stock ? `${month}沒有${stock}的${side}成交。` : `${month}沒有${side}成交。`;
+  }
+  const parts = fills.map((fill) => {
+    const price = `${yuan(fill.fillPriceCents)} 元、${fill.shares} 股`;
+    if (stock) return `${fill.sessionDate} ${price}`;
+    const id = fill.stockId ?? "";
+    return `${fill.sessionDate} ${stockLabel(id, stockNames[id] ?? null)} ${price}`;
+  });
+  const who = stock ?? "";
+  return `${month}有 ${fills.length} 筆${who}${side}成交：${parts.join("；")}。`;
+}
+
+function detectMetric(text: string): PointMetric | "ambiguous" | null {
   const avg = /均價|平均價|平均成本/.test(text);
   const limit = /限價/.test(text);
   const fill = /成交價|成交/.test(text);
@@ -244,6 +352,36 @@ function detectSide(text: string): PaperSide | "both" | null {
   if (buy) return "buy";
   if (sell) return "sell";
   return null;
+}
+
+function extractYearMonths(
+  text: string,
+): { ok: true; months: Array<{ year: number; month: number }> } | { ok: false } {
+  const months: Array<{ year: number; month: number }> = [];
+  for (const match of text.matchAll(/(\d{4})\s*年\s*(\d{1,2})\s*月(?!\s*\d)/g)) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    if (month < 1 || month > 12) return { ok: false };
+    if (!months.some((item) => item.year === year && item.month === month)) {
+      months.push({ year, month });
+    }
+  }
+  return { ok: true, months };
+}
+
+function monthBounds(year: number, month: number): { fromDate: string; toDate: string } {
+  const mm = String(month).padStart(2, "0");
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return {
+    fromDate: `${year}-${mm}-01`,
+    toDate: `${year}-${mm}-${String(last).padStart(2, "0")}`,
+  };
+}
+
+function monthLabel(fromDate: string): string {
+  const match = /^(\d{4})-(\d{2})-/.exec(fromDate);
+  if (!match) return fromDate;
+  return `${match[1]}年${Number(match[2])}月`;
 }
 
 function extractDates(text: string): string[] {
