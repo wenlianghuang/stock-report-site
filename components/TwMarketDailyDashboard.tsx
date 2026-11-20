@@ -26,6 +26,12 @@ function formatPct(value?: number | null) {
   return `${prefix}${value.toFixed(2)}%`;
 }
 
+function formatPoints(value?: number | null) {
+  if (value == null || Number.isNaN(value)) return "—";
+  const prefix = value > 0 ? "+" : "";
+  return `${prefix}${value.toLocaleString("zh-TW")} 點`;
+}
+
 function formatClose(value?: number | null) {
   if (value == null || Number.isNaN(value)) return "—";
   return value.toLocaleString("zh-TW", { maximumFractionDigits: 2 });
@@ -244,6 +250,7 @@ export function TwMarketDailyDashboard() {
     us?.sox_day_return_pct ?? us?.indices?.SOX?.day_return_pct ?? null;
   const ixicAlign = us?.ixic_vs_taiex ?? us?.alignment?.ixic_vs_taiex ?? null;
   const soxAlign = us?.sox_vs_tsmc ?? us?.alignment?.sox_vs_tsmc ?? null;
+  const night = summary?.tx_night ?? facts?.tx_night;
 
   const biasText = useMemo(() => {
     const fromSummary = (summary?.bias || "").trim();
@@ -276,7 +283,7 @@ export function TwMarketDailyDashboard() {
               開盤前戰術 brief
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
-              全站共用一份開盤前 brief。台北 05:30 美股 settle 後由排程產出；每位使用者看到同一份那指／費半對帳與開盤偏誤。持股仍由你自己觸發。
+              全站共用一份開盤前 brief。台北 05:30 美股 settle 後由排程產出；每位使用者看到同一份那指／費半對帳、台指期盤後缺口與開盤偏誤。持股仍由你自己觸發。
             </p>
             {windowInfo ? (
               <p className="mt-3 text-sm text-zinc-700 dark:text-zinc-300">
@@ -442,7 +449,7 @@ export function TwMarketDailyDashboard() {
               </section>
 
               <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-                <h3 className="text-sm font-semibold">美股對帳</h3>
+                <h3 className="text-sm font-semibold">外盤對帳</h3>
                 <p className="mt-1 text-xs text-zinc-500">
                   as_of {us?.as_of ?? "—"}
                   {us?.cutover_passed === false
@@ -466,7 +473,28 @@ export function TwMarketDailyDashboard() {
                     <span>費半 {formatPct(typeof soxRet === "number" ? soxRet : null)}</span>
                     <AlignChip label={soxAlign} />
                   </div>
+                  {night ? (
+                    <div className="flex items-center justify-between text-sm sm:col-span-2">
+                      <span>
+                        台指期夜盤 {night.contract_month ?? ""}{" "}
+                        {night.available
+                          ? `${formatPoints(night.change)}（${formatPct(night.change_pct)}）`
+                          : "資料不足"}
+                      </span>
+                      <AlignChip label={night.alignment_vs_ixic} />
+                    </div>
+                  ) : null}
                 </div>
+                {night?.session_window ? (
+                  <p className="mt-2 text-xs text-zinc-500">
+                    夜盤 {night.session_window}
+                    {(night.prior_settlement ?? night.prior_regular?.settlement) != null
+                      ? ` · 前一日結算 ${formatClose(
+                          night.prior_settlement ?? night.prior_regular?.settlement,
+                        )}`
+                      : ""}
+                  </p>
+                ) : null}
                 {!us?.available ? (
                   <p className="mt-2 text-xs text-zinc-500">美股指數資料不足</p>
                 ) : null}

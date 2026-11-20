@@ -827,6 +827,24 @@ export type MarketDayFacts = {
     ixic_vs_taiex?: string;
     sox_vs_tsmc?: string;
   };
+  tx_night?: {
+    available?: boolean;
+    contract_month?: string | null;
+    session_window?: string | null;
+    attribution_date?: string | null;
+    close?: number | null;
+    change?: number | null;
+    change_pct?: number | null;
+    volume?: number | null;
+    alignment_vs_ixic?: string | null;
+    prior_settlement?: number | null;
+    prior_regular?: {
+      trade_date?: string;
+      contract_month?: string;
+      close?: number | null;
+      settlement?: number | null;
+    } | null;
+  };
   anchors?: string[];
 };
 
@@ -848,6 +866,7 @@ export type MarketDaySummary = {
   technical?: MarketDayFacts["technical"];
   tsmc?: MarketDayFacts["tsmc"];
   us?: MarketDayFacts["us"];
+  tx_night?: MarketDayFacts["tx_night"];
   bias?: string;
   dashboard?: string;
   external?: string;

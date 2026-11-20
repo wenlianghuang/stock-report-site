@@ -321,6 +321,8 @@ function liveQuote(patch: Partial<LiveQuote> = {}): LiveQuote {
     lastAt: at("2026-03-02T10:05:50").toISOString(),
     bid: PREVIOUS_CLOSE - 50,
     ask: PREVIOUS_CLOSE,
+    bids: [],
+    asks: [],
     ...patch,
   };
 }

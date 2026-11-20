@@ -2,8 +2,13 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { PaperLedgerAsk } from "@/components/PaperLedgerAsk";
-import type { PaperRecordOutcome, PaperSnapshot } from "@/lib/paper-view";
-import type { PaperOrderType, PaperSide } from "@/lib/paper-trade";
+import {
+  formatTaipeiDateTime,
+  type PaperBookView,
+  type PaperRecordOutcome,
+  type PaperSnapshot,
+} from "@/lib/paper-view";
+import { sessionPhaseLabel, type PaperOrderType, type PaperSide, type SessionPhase } from "@/lib/paper-trade";
 
 type StockHit = { stockId: string; stockName: string };
 
@@ -414,15 +419,28 @@ function OrderTicket({
         side === "buy"
           ? `凍結現金 ${groupPlainTwd(payload.reservedCash)} 元`
           : `凍結 ${payload.reservedShares ?? 0} 股`;
+      resetTicket();
       await onPlaced(
         `已送出${sideLabel}${typeLabel} ${shareCount} 股，交易日 ${payload.sessionDate ?? "—"}，${reserve}。盤中會用證交所當下報價撮合。`,
       );
-      if (orderType === "limit") setLimitPrice("");
     } catch {
       setError("下單失敗");
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function resetTicket() {
+    setQuery("");
+    setStockId("");
+    setStockName(null);
+    setHits([]);
+    setSearchOpen(false);
+    setSide("buy");
+    setOrderType("limit");
+    setShares("1");
+    setLimitPrice("");
+    setError("");
   }
 
   return (
@@ -436,7 +454,9 @@ function OrderTicket({
         </div>
       </div>
 
-      <form onSubmit={(event) => void submit(event)} className="mt-4 space-y-4">
+      <form onSubmit={(event) => void submit(event)} className="mt-4">
+        <div className={`grid items-start gap-4 ${stockId ? "md:grid-cols-[minmax(0,1fr)_18rem]" : ""}`}>
+        <div className="space-y-4">
         <div ref={searchRef} className="relative">
           <label htmlFor="paper-stock" className="text-xs font-medium text-zinc-500">
             股票
@@ -566,7 +586,10 @@ function OrderTicket({
           >
             {submitting ? "送出中…" : side === "buy" ? "送出買單" : "送出賣單"}
           </button>
-          <p className="text-xs text-zinc-500">送出先凍結。盤中大約每 5 秒用證交所報價撮合一次。</p>
+          <p className="text-xs text-zinc-500">送出先凍結。盤中大約每 5 秒用證交所報價撮合一次。送出成功後，選股和五檔會清掉。</p>
+        </div>
+        </div>
+        {stockId ? <OrderBook key={stockId} stockId={stockId} /> : null}
         </div>
       </form>
 
@@ -582,6 +605,119 @@ function OrderTicket({
       </details>
     </section>
   );
+}
+
+function OrderBook({ stockId }: { stockId: string }) {
+  const [book, setBook] = useState<PaperBookView | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let stopped = false;
+
+    async function load() {
+      if (stopped || document.visibilityState === "hidden") return;
+      try {
+        const response = await fetch(`/api/paper/book?stockId=${encodeURIComponent(stockId)}`, {
+          cache: "no-store",
+        });
+        const payload = (await response.json()) as PaperBookView & { error?: string };
+        if (stopped) return;
+        if (!response.ok) {
+          setError(payload.error ?? "無法讀取五檔");
+          return;
+        }
+        setBook(payload);
+        setError("");
+      } catch {
+        if (!stopped) setError("無法讀取五檔");
+      }
+    }
+
+    void load();
+    const timer = window.setInterval(() => void load(), 5_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [stockId]);
+
+  return (
+    <aside
+      aria-label="上下五檔"
+      className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900"
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <h4 className="text-sm font-semibold">上下五檔</h4>
+        <p className="text-xs text-zinc-500">{book ? bookStatus(book.phase, book.quoteAt) : "讀取中"}</p>
+      </div>
+      {error ? <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p> : null}
+      <div className="mt-2 grid grid-cols-[2.25rem_1fr_auto] gap-x-2 px-1 text-[11px] text-zinc-500">
+        <span />
+        <span className="text-right">張</span>
+        <span className="text-right">價格</span>
+      </div>
+      <div className="space-y-0.5 text-sm tabular-nums">
+        {askRows(book?.asks ?? []).map((level, index) => (
+          <BookRow key={`ask-${index}`} label={`賣${5 - index}`} level={level} tone="ask" />
+        ))}
+        <div className="grid grid-cols-[2.25rem_1fr_auto] items-baseline gap-2 border-y border-zinc-200 px-1 py-1.5 font-semibold dark:border-zinc-700">
+          <span className="text-xs font-medium text-zinc-500">成交</span>
+          <span />
+          <span>{book?.last ? groupPlainTwd(book.last) : "—"}</span>
+        </div>
+        {bidRows(book?.bids ?? []).map((level, index) => (
+          <BookRow key={`bid-${index}`} label={`買${index + 1}`} level={level} tone="bid" />
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">張數是證交所揭示張數。市價單碰到最佳買價或最佳賣價就全部成交。</p>
+    </aside>
+  );
+}
+
+function bookStatus(phase: SessionPhase, quoteAt: string | null): string {
+  const when = quoteAt ? formatTaipeiDateTime(quoteAt) : "";
+  const label = sessionPhaseLabel(phase);
+  return when ? `${label} ${when}` : label;
+}
+
+function askRows(levels: PaperBookView["asks"]) {
+  const shown = levels.slice(0, 5).reverse();
+  return [...Array.from({ length: 5 - shown.length }, () => null), ...shown];
+}
+
+function bidRows(levels: PaperBookView["bids"]) {
+  return Array.from({ length: 5 }, (_, index) => levels[index] ?? null);
+}
+
+function BookRow({
+  label,
+  level,
+  tone,
+}: {
+  label: string;
+  level: { price: string; lots: number | null } | null;
+  tone: "ask" | "bid";
+}) {
+  const toneClass =
+    tone === "ask" ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400";
+  return (
+    <div className={`grid grid-cols-[2.25rem_1fr_auto] items-baseline gap-2 px-1 ${toneClass}`}>
+      <span className="text-xs">{label}</span>
+      <span className="text-right text-xs text-zinc-500">
+        {level ? (level.lots != null ? groupLots(level.lots) : "—") : ""}
+      </span>
+      <span>{level ? groupPlainTwd(level.price) : "—"}</span>
+    </div>
+  );
+}
+
+function groupLots(lots: number): string {
+  return String(lots).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
 function WorkingOrders({

@@ -9,7 +9,7 @@ import {
 } from "@/lib/paper-db";
 import { fetchDailyCloses, fetchLiveQuotes, loadTradingCalendar } from "@/lib/paper-market";
 import { placeOnBook, runPaperTick } from "@/lib/paper-session";
-import type { LiveQuote } from "@/lib/paper-quote";
+import type { BookLevel, LiveQuote } from "@/lib/paper-quote";
 import {
   formatTwdFromCents,
   orderSessionDate,
@@ -21,7 +21,13 @@ import {
   type PaperSide,
   type SessionPhase,
 } from "@/lib/paper-trade";
-import { buildPaperSnapshot, latestCloseOnOrBefore, type PaperSnapshot } from "@/lib/paper-view";
+import {
+  buildPaperSnapshot,
+  latestCloseOnOrBefore,
+  type PaperBookLevelView,
+  type PaperBookView,
+  type PaperSnapshot,
+} from "@/lib/paper-view";
 import { resolveListedMarket, resolveStockNameById } from "@/lib/tw-stock-registry";
 
 export class PaperActionError extends Error {
@@ -83,6 +89,36 @@ export async function placePaperOrderForUser(input: {
   } catch (error) {
     throw new PaperActionError(errorText(error), 400);
   }
+}
+
+/** 下單區選中的一檔。只讀五檔，不寫帳、不撮合。 */
+export async function loadPaperBookForUser(stockId: string, now = new Date()): Promise<PaperBookView> {
+  const id = stockId.trim();
+  const market = await resolveListedMarket(id);
+  if (!market) throw new PaperActionError("不是上市或上櫃股號", 400);
+
+  const [stockName, phase] = await Promise.all([resolveStockNameById(id), readPhase(now)]);
+  let quote: LiveQuote | null = null;
+  try {
+    const quotes = await fetchLiveQuotes([{ stockId: id, market }], now, { refresh: true });
+    quote = quotes.get(id) ?? null;
+  } catch {
+    quote = null;
+  }
+
+  return {
+    stockId: id,
+    stockName,
+    quoteAt: quote?.quoteAt ?? quote?.at ?? null,
+    last: quote?.last != null ? formatTwdFromCents(quote.last) : null,
+    bids: (quote?.bids ?? []).map(toBookLevel),
+    asks: (quote?.asks ?? []).map(toBookLevel),
+    phase,
+  };
+}
+
+function toBookLevel(level: BookLevel): PaperBookLevelView {
+  return { price: formatTwdFromCents(level.priceCents), lots: level.lots };
 }
 
 export async function cancelPaperOrderForUser(orderId: string) {

@@ -27,6 +27,8 @@ function quote(patch: Partial<LiveQuote> = {}): LiveQuote {
     lastAt: "2026-10-28T05:16:00.000Z",
     bid: 3_545,
     ask: 3_550,
+    bids: [],
+    asks: [],
     ...patch,
   };
 }

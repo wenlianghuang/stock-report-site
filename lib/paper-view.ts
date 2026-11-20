@@ -116,6 +116,22 @@ export type PaperRecordView = {
   pnl: PaperMoneyView | null;
 };
 
+export type PaperBookLevelView = {
+  price: string;
+  lots: number | null;
+};
+
+/** 下單區選中一檔時的五檔。價格是元，張數是證交所揭示張數。 */
+export type PaperBookView = {
+  stockId: string;
+  stockName: string | null;
+  quoteAt: string | null;
+  last: string | null;
+  bids: PaperBookLevelView[];
+  asks: PaperBookLevelView[];
+  phase: SessionPhase;
+};
+
 export type PaperSnapshot = {
   cash: PaperMoneyView;
   available: PaperMoneyView;

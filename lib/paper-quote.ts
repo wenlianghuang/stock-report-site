@@ -13,10 +13,20 @@ export type LiveQuote = {
   last: number | null;
   /** 最新成交時間。早於下單的成交不用來判斷限價。 */
   lastAt: string | null;
-  /** 買價，最佳一檔。 */
+  /** 買價，最佳一檔。撮合只用這一檔。 */
   bid: number | null;
-  /** 賣價，最佳一檔。 */
+  /** 賣價，最佳一檔。撮合只用這一檔。 */
   ask: number | null;
+  /** 買價五檔，由最佳往下。張數沒有時是 null。 */
+  bids: BookLevel[];
+  /** 賣價五檔，由最佳往上。張數沒有時是 null。 */
+  asks: BookLevel[];
+};
+
+/** 委託簿一檔。張數是證交所揭示的整數張。 */
+export type BookLevel = {
+  priceCents: number;
+  lots: number | null;
 };
 
 type MisRow = {
@@ -24,6 +34,8 @@ type MisRow = {
   z?: unknown;
   a?: unknown;
   b?: unknown;
+  f?: unknown;
+  g?: unknown;
   t?: unknown;
   d?: unknown;
   tlong?: unknown;
@@ -50,7 +62,7 @@ export function liveQuotesFromMis(payload: unknown, observedAt: Date): Map<strin
   for (const row of rows) {
     const stockId = text(row.c);
     if (!stockId || !/^\d{4,6}$/.test(stockId)) continue;
-    const quoteAt = fromTlong(row.tlong) ?? taipeiStamp(text(row.d), text(row.t));
+    const quoteAt = taipeiStamp(text(row.d), text(row.t)) ?? fromTlong(row.tlong);
     const printed = listedPriceToCents(row.z);
     const tradePrice = listedPriceToCents(row.trade?.z);
     const tradeAt = taipeiStamp(text(row.d), text(row.trade?.t));
@@ -63,6 +75,8 @@ export function liveQuotesFromMis(payload: unknown, observedAt: Date): Map<strin
       lastAt,
       bid: firstLevel(row.b),
       ask: firstLevel(row.a),
+      bids: bookLevels(row.b, row.g),
+      asks: bookLevels(row.a, row.f),
     });
   }
   return quotes;
@@ -91,6 +105,27 @@ function misRows(payload: unknown): MisRow[] {
 function firstLevel(value: unknown): number | null {
   if (typeof value !== "string") return null;
   return listedPriceToCents(value.split("_")[0] ?? "");
+}
+
+/** 價格與張數同一位置對齊。無效價格整檔略過，最多五檔。 */
+function bookLevels(prices: unknown, sizes: unknown): BookLevel[] {
+  if (typeof prices !== "string") return [];
+  const priceParts = prices.split("_");
+  const sizeParts = typeof sizes === "string" ? sizes.split("_") : [];
+  const levels: BookLevel[] = [];
+  for (let index = 0; index < priceParts.length && levels.length < 5; index += 1) {
+    const priceCents = listedPriceToCents(priceParts[index]);
+    if (priceCents === null) continue;
+    levels.push({ priceCents, lots: boardLots(sizeParts[index]) });
+  }
+  return levels;
+}
+
+function boardLots(value: string | undefined): number | null {
+  if (!value || !/^\d+$/.test(value)) return null;
+  const lots = Number(value);
+  if (!Number.isSafeInteger(lots)) return null;
+  return lots;
 }
 
 function fromTlong(value: unknown): string | null {
